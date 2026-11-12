@@ -10,7 +10,7 @@
 | `trainer/core.py` | алгоритм тренировки (автомат состояний) | ничего |
 | `trainer/sim.py`  | симулятор резонатора | ничего |
 | `trainer/tango_res.py` *(позже)* | резонатор через Tango `DeviceProxy`, имена — из config | PyTango |
-| `gui/` *(позже)* | окна, графики | PyQt5, pyqtgraph |
+| `gui/` | окна: «Обзор» + вкладка на резонатор, графики | PyQt5, pyqtgraph |
 
 ## Алгоритм (решения)
 - Шаг каждые Response Delay, только когда вакуум ≤ Good.

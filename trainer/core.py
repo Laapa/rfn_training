@@ -30,6 +30,16 @@ class Settings:
     very_bad: float = 1e-8
     back_steps: int = 3
 
+    def check(self):
+        """Пустая строка, если настройки в порядке, иначе текст ошибки."""
+        if self.step <= 0:
+            return "Step должен быть больше 0"
+        if self.low >= self.high:
+            return "Low должен быть меньше High"
+        if not self.good < self.bad < self.very_bad:
+            return "Нужно Good < Bad < Very Bad"
+        return ""
+
 
 class Trainer:
     def __init__(self, resonator, settings, log=print):
@@ -40,6 +50,7 @@ class Trainer:
         self.direction = +1     # +1 вверх, -1 вниз
         self.t_mark = 0.0       # когда начали отсчёт Response Delay / Timeout
         self.finished = False   # дошли до Stop (повод для фанфар)
+        self.vacuum = 0.0       # последнее прочитанное значение (для экрана)
 
     # Start и Stop не вводятся, а вычисляются из Low/High и направления
     @property
@@ -53,11 +64,11 @@ class Trainer:
     def enable(self, now):
         """Поставили галку AUTO. Возвращает False, если начать нельзя."""
         s = self.s
-        if not (s.step > 0 and s.low < s.high and s.good < s.bad < s.very_bad):
-            self.log("Неверные настройки, тренировка не запущена")
+        if s.check():
+            self.log(s.check() + ", тренировка не запущена")
             return False
         u = self.res.read_setpoint()
-        self._sync_direction(u)
+        self.sync_direction(u)
         if (u - self.stop) * self.direction >= 0:
             self.log(f"Уставка {u:.2f} кВ уже на Stop или за ним, тренировка не запущена")
             return False
@@ -72,10 +83,11 @@ class Trainer:
         self.log("MANUAL")
 
     def tick(self, now):
+        vac = self.res.read_vacuum()   # вакуум читаем всегда, даже в MANUAL
+        self.vacuum = vac
         if self.state == MANUAL:
             return
         s = self.s
-        vac = self.res.read_vacuum()
 
         # п.3-4: Very Bad в любой момент -> шаги назад, повтор не чаще раза в Timeout
         if vac >= s.very_bad:
@@ -102,7 +114,7 @@ class Trainer:
 
     # ---------------------------------------------------------------------
 
-    def _sync_direction(self, u):
+    def sync_direction(self, u):
         if self.s.sequence == UP:
             self.direction = +1
         elif self.s.sequence == DOWN:
@@ -112,7 +124,7 @@ class Trainer:
 
     def _step_forward(self):
         u = self.res.read_setpoint()
-        self._sync_direction(u)     # Sequence могли поменять на ходу
+        self.sync_direction(u)      # Sequence могли поменять на ходу
         if (u - self.stop) * self.direction < 0:   # до Stop ещё не дошли
             new = u + self.direction * self.s.step
             if (new - self.stop) * self.direction > 0:
