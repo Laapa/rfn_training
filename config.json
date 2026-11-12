@@ -1,0 +1,16 @@
+{
+    "vac_coeff": 1500.0,
+    "i_coeff": 45.0,
+    "u_dac_coeff": 187.0,
+    "u_adc_coeff": 282.0,
+    "ip_address": "10.0.0.96",
+    "port": 502,
+    "unit_id": 3,
+    "input_reg": 0,
+    "red_text": 6e-05,
+    "green_text": 4e-05,
+    "orange_text": 8e-05,
+    "xtime": 7200.0,
+    "u_otr_coeff": 6.0,
+    "r_sh": 3.19e6
+}
