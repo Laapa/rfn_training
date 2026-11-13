@@ -52,6 +52,7 @@ class Trainer:
         self.t_mark = 0.0       # когда начали отсчёт Response Delay / Timeout
         self.finished = False   # дошли до Stop (повод для фанфар)
         self.vacuum = 0.0       # последнее прочитанное значение (для экрана)
+        self.paused = False     # кнопка Stop/Start: шаги вперёд на паузе, защита работает
 
     # Start и Stop не вводятся, а вычисляются из Low/High и направления
     @property
@@ -74,6 +75,7 @@ class Trainer:
             self.log(f"Уставка {u:.2f} кВ уже на Stop или за ним, тренировка не запущена")
             return False
         self.finished = False
+        self.paused = False
         self.state = WAIT_GOOD
         self.log(f"AUTO: {s.sequence}, Start {self.start} кВ, Stop {self.stop} кВ")
         return True
@@ -117,8 +119,28 @@ class Trainer:
         # DELAY, п.2: отсчитываем Response Delay; если стало Bad - отсчёт сначала
         if vac >= s.bad:
             self.state = WAIT_GOOD
-        elif now - self.t_mark >= s.response_delay:
+        elif now - self.t_mark >= s.response_delay and not self.paused:
             self._step_forward()
+
+    def set_paused(self, paused):
+        """Кнопки Stop / Start: остановить шаги вперёд, не выходя из AUTO.
+        Откат при Very Bad на паузе продолжает работать - это защита."""
+        self.paused = paused
+        self.log("Пауза" if paused else "Продолжаем")
+
+    def reverse(self):
+        """Кнопка Reverse: развернуть направление."""
+        s = self.s
+        if s.sequence == UP:
+            s.sequence = DOWN
+        elif s.sequence == DOWN:
+            s.sequence = UP
+        elif s.sequence == ZONE:
+            self.direction = -self.direction
+        else:
+            self.log("В режиме SAW разворота нет")
+            return
+        self.log(f"Reverse: теперь Stop {self.stop:g} кВ")
 
     # ---------------------------------------------------------------------
 

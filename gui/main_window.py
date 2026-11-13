@@ -4,6 +4,7 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from trainer.core import Trainer, Settings, MANUAL
+from gui import style
 from gui.panel import ResonatorPanel, STATE_TEXT, vac_color
 
 COLUMNS = ["Резонатор", "Режим", "Состояние", "U, кВ", "Вакуум, Торр", "Start → Stop"]
@@ -11,8 +12,8 @@ Qt = QtCore.Qt
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, resonators, tick_ms):
-        """resonators - список пар (имя, объект резонатора)."""
+    def __init__(self, resonators, config, message=""):
+        """resonators - список пар (имя, объект резонатора), config - из training_config.json."""
         super().__init__()
         self.setWindowTitle("Тренировка резонаторов - обзор")
         self.now = 0   # время алгоритма, с (1 тик = 1 с)
@@ -21,11 +22,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.setShowGrid(False)
         self.setCentralWidget(self.table)
 
         self.panels = []
         for row, (name, res) in enumerate(resonators):
-            self.panels.append(ResonatorPanel(name, Trainer(res, Settings())))
+            self.panels.append(ResonatorPanel(name, Trainer(res, Settings()), config))
             for col in range(len(COLUMNS)):          # ячейки создаём один раз
                 self.table.setItem(row, col, QtWidgets.QTableWidgetItem())
             first = self.table.item(row, 0)
@@ -34,10 +38,10 @@ class MainWindow(QtWidgets.QMainWindow):
             first.setCheckState(Qt.Unchecked)
         self.table.itemChanged.connect(self.on_check)
 
-        self.statusBar().showMessage("Поставь галку у резонатора, чтобы открыть его окно")
+        self.statusBar().showMessage(f"{message}.  Поставь галку у резонатора, чтобы открыть его окно")
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.tick)
-        self.timer.start(tick_ms)
+        self.timer.start(config["tick_ms"])
 
     def on_check(self, item):
         if item.column() != 0:
@@ -72,7 +76,7 @@ class MainWindow(QtWidgets.QMainWindow):
             for col, text in enumerate(texts):
                 self.table.item(row, col).setText(text)
             self.table.item(row, 0).setCheckState(Qt.Checked if panel.isVisible() else Qt.Unchecked)
-            self.table.item(row, 1).setForeground(QtGui.QColor("green" if auto else "gray"))
+            self.table.item(row, 1).setForeground(QtGui.QColor(style.GREEN if auto else style.MUTED))
             self.table.item(row, 4).setForeground(QtGui.QColor(vac_color(tr.vacuum, tr.s)))
         self.table.blockSignals(False)
 

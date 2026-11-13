@@ -3,20 +3,22 @@ import sys
 
 from PyQt5 import QtWidgets, QtCore
 
+from gui import style
 from gui.main_window import MainWindow
+from trainer import config as cfg
 from trainer.sim import SimResonator
 
-# 1 тик = 1 секунда алгоритма. 1000 мс - реальное время, 200 мс - симулятор в 5 раз быстрее.
-TICK_MS = 200
 
-
-def make_resonators():
-    """Пока симуляторы. Позже здесь будут резонаторы из Tango (по config)."""
+def make_resonators(config):
+    """Резонаторы из training_config.json. Пока только симуляторы, Tango - позже."""
     result = []
-    for i in range(3):
-        res = SimResonator(conditioned=24 + 3 * i, seed=i)   # каждый «грязный» по-своему
+    for i, item in enumerate(config["resonators"]):
+        if item["type"] != "sim":
+            raise SystemExit(f"{item['name']}: тип {item['type']} ещё не поддерживается")
+        res = SimResonator(conditioned=24 + 3 * i, seed=i,             # каждый «грязный» по-своему
+                           vac_coeff=config["vac_coeff"], r_sh=config["r_sh"])
         res.set_voltage(20.0)
-        result.append((f"Резонатор {i + 1}", res))
+        result.append((item["name"], res))
     return result
 
 
@@ -26,8 +28,9 @@ if __name__ == "__main__":
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyle("Fusion")
-    window = MainWindow(make_resonators(), TICK_MS)
-    window.resize(800, 250)   # окна резонаторов встают в половины экрана сами
+    style.setup(app)
+    config, message = cfg.load()
+    window = MainWindow(make_resonators(config), config, message)
+    window.resize(900, 260)   # окна резонаторов встают в половины экрана сами
     window.show()
     sys.exit(app.exec_())

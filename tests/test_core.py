@@ -106,6 +106,30 @@ def test_saw_jumps_to_low():
     assert after_high and after_high[0] == 20 and tr.state != MANUAL   # с High - сразу в Low
 
 
+def test_pause_stops_steps_but_not_backoff():
+    res, tr = make(21)
+    tr.enable(0)
+    tr.set_paused(True)
+    run(tr, 0, 50)
+    assert res.u == 21              # на паузе вперёд не шагаем
+    res.vac = VERY_BAD
+    tr.tick(50)
+    assert res.u == 20              # а отступать - отступаем
+    tr.set_paused(False)
+    res.vac = GOOD
+    run(tr, 51, 60)
+    assert res.u > 20
+
+
+def test_reverse():
+    res, tr = make(21)
+    tr.enable(0)
+    tr.reverse()
+    assert tr.s.sequence == DOWN
+    run(tr, 0, 100)
+    assert res.u == 20 and tr.finished
+
+
 def test_very_bad_not_below_start():
     res, tr = make(20.5)
     tr.enable(0)
