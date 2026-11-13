@@ -16,7 +16,6 @@ import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from gui import style
-from gui.style import icon
 from gui.vac_u import VacAxis, VacUWindow
 from gui.widgets import Lamp, Toggle, ArrowField, PrecisionSlider, value_box, MONO
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
@@ -47,7 +46,7 @@ def vac_color(vac, s):
 
 def show(box, text, color=""):
     box.setText(text)
-    box.setStyleSheet(f"color: {color}" if color else "")
+    box.setStyleSheet(f"color: {style.color(color)}" if color else "")
 
 
 class ResonatorPanel(QtWidgets.QWidget):
@@ -65,24 +64,26 @@ class ResonatorPanel(QtWidgets.QWidget):
         s, res = trainer.s, trainer.res
 
         # ========================= Графики =========================
-        self.plot_u = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem()})
+        self.plot_u = pg.PlotWidget(background=style.PLOT_BG, axisItems={"bottom": pg.DateAxisItem()})
         self.plot_u.setTitle("Voltage (kV)", color="y", size="12pt")
         self.plot_u.addLegend(offset=(10, 5))
         self.curve_u = self.plot_u.plot(pen=pg.mkPen((255, 0, 0)), name="U резонатора")
         self.curve_u_set = self.plot_u.plot(pen=pg.mkPen("y", style=QtCore.Qt.DashLine), name="уставка")
-        self.plot_vac = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
+        self.plot_vac = pg.PlotWidget(background=style.PLOT_BG,
+                                      axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
         self.plot_vac.setTitle("Vacuum (torr)", color="y", size="12pt")
         self.plot_vac.setLogMode(y=True)
         self.curve_vac = self.plot_vac.plot(pen=pg.mkPen((255, 0, 0)))
         self.lines = {}   # пороги пунктиром тех же цветов
         for attr, color in THRESHOLDS:
-            self.lines[attr] = pg.InfiniteLine(angle=0, pen=pg.mkPen(color, style=QtCore.Qt.DashLine))
+            self.lines[attr] = pg.InfiniteLine(angle=0, pen=pg.mkPen(style.color(color), width=1.5,
+                                                                      style=QtCore.Qt.DashLine))
             self.plot_vac.addItem(self.lines[attr])
         for p in (self.plot_u, self.plot_vac):
-            p.showGrid(x=True, y=True)
+            p.showGrid(x=True, y=True, alpha=0.2)
             p.setClipToView(True)
             p.setDownsampling(auto=True)
-            p.setMinimumHeight(90)
+            p.setMinimumHeight(80)
         self.plot_vac.setXLink(self.plot_u)
 
         self.units = QtWidgets.QPushButton("A")        # как в старой программе: A <-> торр
@@ -113,6 +114,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             grid.addWidget(QtWidgets.QLabel(text), r, 0)
             grid.addWidget(self.data[key], r, 1)
             grid.addWidget(QtWidgets.QLabel(unit), r, 2)
+        grid.setVerticalSpacing(3)
         box_data = QtWidgets.QGroupBox("Данные")
         style.group(box_data, "cyan")
         box_data.setLayout(grid)
@@ -125,7 +127,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             for e in (amps, torr):
                 e.setFixedWidth(90)
                 e.setFont(MONO)
-                e.setStyleSheet(f"color: {color}")
+                e.setStyleSheet(f"color: {style.color(color)}")
             amps.returnPressed.connect(lambda a=attr: self.set_threshold(a, True))
             torr.returnPressed.connect(lambda a=attr: self.set_threshold(a, False))
             self.thr[attr] = (amps, torr)
@@ -155,13 +157,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         grid.addWidget(self.i_field, 1, 1)
         grid.addWidget(self.slider_manual, 0, 2, 2, 1)
         self.box_manual = QtWidgets.QGroupBox("Ручное управление")
-        style.group(self.box_manual, "red", 5)        # MANUAL - активна, красная рамка
+        style.group(self.box_manual, "red", True)     # MANUAL - активна, красная рамка
         self.box_manual.setLayout(grid)
 
         # ========================= Лампочки =========================
-        self.lamp_link, self.lamp_ready, self.lamp_agc_u, self.lamp_agc_i = Lamp(), Lamp(), Lamp(), Lamp()
+        self.lamp_ready, self.lamp_agc_u, self.lamp_agc_i = Lamp(), Lamp(), Lamp()
         lamps = QtWidgets.QGridLayout()
-        for r, (lamp, text) in enumerate(((self.lamp_link, "Связь"), (self.lamp_ready, "Готовность"),
+        for r, (lamp, text) in enumerate(((self.lamp_ready, "Готовность"),
                                           (self.lamp_agc_u, "АРУ: U"), (self.lamp_agc_i, "АРУ: I"))):
             lamps.addWidget(lamp, r, 0)
             lamps.addWidget(QtWidgets.QLabel(text), r, 1)
@@ -181,7 +183,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         col1.addWidget(self.btn_stop)
         col1.addWidget(self.btn_rev)
 
-        self.arrow_up, self.arrow_down = QtWidgets.QLabel(), QtWidgets.QLabel()   # стрелки направления
+        self.arrow_up, self.arrow_down = QtWidgets.QLabel("▲"), QtWidgets.QLabel("▼")   # направление
         col2 = QtWidgets.QVBoxLayout()
         col2.addWidget(self.arrow_up)
         col2.addWidget(self.arrow_down)
@@ -217,7 +219,8 @@ class ResonatorPanel(QtWidgets.QWidget):
         auto_lay.addWidget(self.slider_auto)
         auto_lay.addLayout(col5)
         self.box_auto = QtWidgets.QGroupBox("Автоматическое управление")
-        style.group(self.box_auto, "gray", 5)
+        style.group(self.box_auto, "gray")
+        self.shown_auto = False                       # какой режим сейчас нарисован (рамки)
         self.box_auto.setLayout(auto_lay)
 
         self.toggle = Toggle()
@@ -254,9 +257,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         scroll.setWidget(controls)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        # Поля всегда видны целиком; только на совсем маленьком экране - прокрутка
-        screen_h = QtWidgets.QApplication.primaryScreen().availableGeometry().height()
-        scroll.setMinimumHeight(min(controls.sizeHint().height() + 12, screen_h - 450))
+        self.scroll = scroll                       # высоту подгоняет fit_controls()
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)   # границу можно тянуть мышью
         self.splitter.addWidget(box_plots)
@@ -268,7 +269,8 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.clock = QtWidgets.QLineEdit()
         self.clock.setReadOnly(True)
         self.clock.setFont(QtGui.QFont("Consolas", 13))
-        self.clock.setFixedWidth(330)
+        self.clock.setFixedWidth(self.clock.fontMetrics().horizontalAdvance(
+            "2026-11-13 00:00:00 воскресенье") + 20)
         self.foot = {"pump": value_box(), "u": value_box(), "u_no": value_box()}
         vals = QtWidgets.QGridLayout()
         for r, (key, text, unit) in enumerate((("pump", "I насоса", "A"), ("u", "U резонатора", "кВ"),
@@ -300,6 +302,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         main.addWidget(self.status)
         self.file_msg = f"Начата запись в файл {self.file.name}"
         self.status.setText(self.file_msg)
+
+    def fit_controls(self):
+        """Поля управления всегда видны целиком; только на совсем маленьком экране - прокрутка."""
+        screen_h = QtWidgets.QApplication.primaryScreen().availableGeometry().height()
+        need = min(self.controls.sizeHint().height() + 4, screen_h - 450)
+        if self.scroll.minimumHeight() != need:
+            self.scroll.setMinimumHeight(need)
 
     # ------------------------------------------------------------------ обработчики
 
@@ -426,15 +435,16 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.clock.setText(t.strftime("%Y-%m-%d %H:%M:%S ") + DAYS[t.weekday()])
 
         # --- лампочки
-        self.lamp_link.set("green" if res.connected else "blue")
         self.lamp_ready.set("green" if m["ready"] else "red")
         self.lamp_agc_u.set("green" if m["agc_u"] else "gray")
         self.lamp_agc_i.set("green" if m["agc_i"] else "gray")
         self.lamp_auto.set("green" if auto and not tr.paused else "red")
 
         # --- автоматика и ручное: активная группа - красная рамка, как было
-        style.group(self.box_auto, "red" if auto else "gray", 5)
-        style.group(self.box_manual, "gray" if auto else "red", 5)
+        if auto != self.shown_auto:               # перекрашиваем рамки только при смене режима
+            style.group(self.box_auto, "red" if auto else "gray", auto)
+            style.group(self.box_manual, "gray" if auto else "red", not auto)
+            self.shown_auto = auto
         self.mode.setText("AUTO" if auto else "MANUAL")
         for b in (self.btn_start, self.btn_stop, self.btn_rev):
             b.setEnabled(auto)
@@ -443,14 +453,16 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.u_field.set_value(u_set)
         going_up = auto and tr.direction > 0
         going_down = auto and tr.direction < 0
-        self.arrow_up.setPixmap(QtGui.QPixmap(icon("arrow_up_10.png" if going_up else "arrow_up_gray_10.png")))
-        self.arrow_down.setPixmap(QtGui.QPixmap(icon("arrow_down_10.png" if going_down else "arrow_down_gray_10.png")))
+        for arrow, on in ((self.arrow_up, going_up), (self.arrow_down, going_down)):
+            arrow.setStyleSheet(f"font-size: 26pt; color: {style.C['green'] if on else style.C['gray']}")
         self.start_stop.setText(f"{tr.start:g} → {tr.stop:g} кВ")
         self.state_lbl.setText(("Пауза · " if auto and tr.paused else "") + STATE_TEXT[tr.state])
         if self.seq.currentText() != s.sequence:   # Reverse мог поменять UP <-> DOWN
             self.seq.blockSignals(True)
             self.seq.setCurrentText(s.sequence)
             self.seq.blockSignals(False)
+
+        self.fit_controls()
 
         # --- запись в файл
         self.file.write(m, vac, u_set, res.read_current(), "AUTO" if auto else "MANUAL")

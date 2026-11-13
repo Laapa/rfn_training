@@ -90,9 +90,10 @@ class MainWindow(QtWidgets.QMainWindow):
             for col, text in enumerate(texts):
                 self.table.item(row, col).setText(text)
             self.table.item(row, 0).setCheckState(Qt.Checked if panel.isVisible() else Qt.Unchecked)
-            self.table.item(row, 1).setForeground(QtGui.QColor("green" if auto else "gray"))
+            self.table.item(row, 1).setForeground(QtGui.QColor(style.color("green" if auto else "gray")))
             color = vac_color(tr.vacuum, tr.s)
-            self.table.item(row, 4).setForeground(QtGui.QColor(color) if color else self.palette().text())
+            self.table.item(row, 4).setForeground(QtGui.QColor(style.color(color)) if color
+                                                  else self.palette().text())
         self.table.blockSignals(False)
 
     def closeEvent(self, event):

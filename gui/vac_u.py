@@ -27,7 +27,7 @@ class VacUWindow(QtWidgets.QWidget):
         self.setWindowTitle(f"{name} - вакуум от напряжения")
         self.resize(700, 450)
         self.u, self.vac = [], []
-        self.plot = pg.PlotWidget(axisItems={"left": VacAxis("left")})
+        self.plot = pg.PlotWidget(background="#0b1220", axisItems={"left": VacAxis("left")})
         self.plot.setTitle("Vacuum (torr) vs Voltage (kV)", color="y", size="12pt")
         self.plot.setLogMode(y=True)
         self.plot.showGrid(x=True, y=True)

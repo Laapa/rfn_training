@@ -1,34 +1,45 @@
-"""Элементы интерфейса из старой программы: лампочка, тумблер, поле со стрелками, ползунок."""
+"""Элементы интерфейса из старой программы в современном виде:
+лампочка, тумблер, поле со стрелками, ползунок «Точно / Грубо»."""
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from gui.style import icon
+from gui.style import LAMP, C
 
 MONO = QtGui.QFont("Consolas", 11)
 
 
 class Lamp(QtWidgets.QLabel):
-    """Лампочка - те же картинки, что в старой программе."""
-    def __init__(self, size=24):
+    """Лампочка: цветной кружок с мягким ободком. set("green" / "red" / "gray" / "blue")."""
+    def __init__(self):
         super().__init__()
-        self.size = size
+        self.setFixedSize(18, 18)
         self.set("gray")
 
-    def set(self, color):            # "green", "red", "blue", "gray"
-        pix = QtGui.QPixmap(icon(f"{color}-led-on.png"))
-        self.setPixmap(pix.scaled(self.size, self.size, QtCore.Qt.KeepAspectRatio,
-                                  QtCore.Qt.SmoothTransformation))
+    def set(self, name):
+        c = QtGui.QColor(LAMP[name])
+        ring = QtGui.QColor(c)
+        ring.setAlpha(90)
+        self.setStyleSheet(f"background: {c.name()}; border-radius: 9px;"
+                           f"border: 3px solid rgba({ring.red()},{ring.green()},{ring.blue()},90);")
 
 
 class Toggle(QtWidgets.QCheckBox):
-    """Большой тумблер AUTO / MANUAL - та же картинка и та же логика, что в старой программе."""
+    """Тумблер AUTO / MANUAL (вместо картинки из старой программы)."""
     def __init__(self):
         super().__init__()
-        self.setStyleSheet(f"""
-            QCheckBox::indicator {{ width: 80px; height: 80px; }}
-            QCheckBox::indicator:unchecked {{ image: url({icon('switch_on_min.png')}); }}
-            QCheckBox::indicator:checked {{ image: url({icon('switch_off_min.png')}); }}
-        """.replace("\\", "/"))
+        self.setFixedSize(72, 38)
         self.setCursor(QtCore.Qt.PointingHandCursor)
+
+    def hitButton(self, pos):          # нажимать можно в любом месте тумблера
+        return self.contentsRect().contains(pos)
+
+    def paintEvent(self, event):
+        p = QtGui.QPainter(self)
+        p.setRenderHint(QtGui.QPainter.Antialiasing)
+        p.setPen(QtCore.Qt.NoPen)
+        p.setBrush(QtGui.QColor(C["green"] if self.isChecked() else C["gray"]))
+        p.drawRoundedRect(0, 0, 72, 38, 19, 19)
+        p.setBrush(QtGui.QColor("white"))
+        p.drawEllipse(38 if self.isChecked() else 4, 4, 30, 30)
 
 
 def value_box(width=90):
@@ -41,7 +52,7 @@ def value_box(width=90):
 
 
 class ArrowField(QtWidgets.QWidget):
-    """Поле ввода со стрелками ⇧ ⇩ справа, как в старой программе.
+    """Поле ввода со стрелками вверх/вниз справа, как в старой программе.
     Enter или стрелка -> on_change(новое значение). Если on_change вернул False - значение откатывается.
     Шаг стрелок берётся из step() (обычно - из ползунка Точно/Грубо)."""
     def __init__(self, value, unit, on_change, step, fmt="{:.2f}", width=80):
@@ -51,20 +62,20 @@ class ArrowField(QtWidgets.QWidget):
         self.edit.setFixedWidth(width)
         self.edit.setFont(MONO)
         self.edit.returnPressed.connect(self.from_text)
-        up = QtWidgets.QPushButton("⇧")
-        down = QtWidgets.QPushButton("⇩")
+        up = QtWidgets.QPushButton("▲")
+        down = QtWidgets.QPushButton("▼")
         for b in (up, down):
-            b.setFixedSize(26, 15)
-            b.setStyleSheet("padding: 0px; font-size: 9pt;")
+            b.setFixedSize(24, 14)
+            b.setStyleSheet("padding: 0px; font-size: 6pt; border-radius: 4px;")
         up.clicked.connect(lambda: self.apply(self.value + self.step()))
         down.clicked.connect(lambda: self.apply(self.value - self.step()))
         arrows = QtWidgets.QVBoxLayout()
-        arrows.setSpacing(0)
+        arrows.setSpacing(1)
         arrows.addWidget(up)
         arrows.addWidget(down)
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(2)
+        lay.setSpacing(3)
         lay.addWidget(self.edit)
         lay.addLayout(arrows)
         lay.addWidget(QtWidgets.QLabel(unit))
