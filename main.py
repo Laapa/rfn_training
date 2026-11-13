@@ -1,7 +1,7 @@
 """Запуск программы.   python main.py"""
 import sys
 
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtCore
 
 from gui.main_window import MainWindow
 from trainer.sim import SimResonator
@@ -21,6 +21,10 @@ def make_resonators():
 
 
 if __name__ == "__main__":
+    # Масштаб Windows (125%, 150%, 4K): без этих строк PyQt5 рисует мелко или мыльно.
+    # Ставятся ДО создания QApplication.
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow(make_resonators(), TICK_MS)

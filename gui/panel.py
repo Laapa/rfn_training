@@ -4,7 +4,7 @@ import math
 import time
 
 import pyqtgraph as pg
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, QtCore
 
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
 
@@ -16,6 +16,22 @@ STATE_TEXT = {
     "DELAY": "Отсчёт Response Delay",
     "BACKOFF": "Отступили, ждём Good / Timeout",
 }
+
+
+class VacAxis(pg.AxisItem):
+    """Ось вакуума: деления 1-2-5 в каждой декаде, подписи вида 2e-09.
+    Стандартная лог-ось pyqtgraph на узком диапазоне лепит подписи друг на друга."""
+    def logTickValues(self, minVal, maxVal, size, stdTicks):
+        levels = [[], [], []]   # главные: 1 / средние: 2, 5 / мелкие: остальные
+        for d in range(math.floor(minVal), math.ceil(maxVal) + 1):
+            for m in range(1, 10):
+                v = d + math.log10(m)          # в лог-режиме ось хранит log10 значения
+                if minVal <= v <= maxVal:
+                    levels[0 if m == 1 else 1 if m in (2, 5) else 2].append(v)
+        return [(1.0, levels[0]), (0.3, levels[1]), (0.1, levels[2])]
+
+    def tickStrings(self, values, scale, spacing):
+        return [f"{10 ** v:.0e}" for v in values]
 
 
 def vac_color(vac, s):
@@ -55,14 +71,16 @@ class ResonatorPanel(QtWidgets.QWidget):
         # ---------- Графики ----------
         self.plot_u = pg.PlotWidget(title="U уставка (кВ) от времени (с)")
         self.curve_u = self.plot_u.plot(pen="y")
-        self.plot_vac = pg.PlotWidget(title="Вакуум (Торр) от времени (с)")
+        self.plot_vac = pg.PlotWidget(title="Вакуум (Торр) от времени (с)",
+                                     axisItems={"left": VacAxis("left")})
         self.plot_vac.setLogMode(y=True)
         self.curve_vac = self.plot_vac.plot(pen="c")
         self.lines = {}   # линии порогов на графике вакуума
         for attr, color in (("good", "g"), ("bad", "r"), ("very_bad", "m")):
             self.lines[attr] = pg.InfiniteLine(angle=0, pen=pg.mkPen(color, style=2))
             self.plot_vac.addItem(self.lines[attr])
-        self.plot_vu = pg.PlotWidget(title="Вакуум (Торр) от U (кВ)")
+        self.plot_vu = pg.PlotWidget(title="Вакуум (Торр) от U (кВ)",
+                                    axisItems={"left": VacAxis("left")})
         self.plot_vu.setLogMode(y=True)
         self.curve_vu = self.plot_vu.plot(pen=None, symbol="o", symbolSize=3,
                                           symbolPen=None, symbolBrush="c")
@@ -129,21 +147,45 @@ class ResonatorPanel(QtWidgets.QWidget):
         # ---------- Последнее сообщение (ошибки ввода, шаги алгоритма) ----------
         self.msg = QtWidgets.QLabel()
 
-        # ---------- Раскладка: графики сверху, поля снизу ----------
+        # ---------- Раскладка ----------
+        # Графики растягиваются на всё свободное место.
+        plots = QtWidgets.QWidget()
+        lay = QtWidgets.QVBoxLayout(plots)
+        lay.setContentsMargins(0, 0, 0, 0)
+        for p in (self.plot_u, self.plot_vac, self.plot_vu):
+            p.setMinimumHeight(100)
+            lay.addWidget(p)
+
+        # Поля ввода не растягиваются (Fixed) и прижаты влево.
         middle = QtWidgets.QVBoxLayout()
         for w in (box_vac, box_cur, self.box_manual):
             middle.addWidget(w)
         middle.addStretch()
+        fields = QtWidgets.QWidget()
+        lay = QtWidgets.QHBoxLayout(fields)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(box_train)
+        lay.addLayout(middle)
+        fields.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
 
-        bottom = QtWidgets.QHBoxLayout()
-        bottom.addWidget(box_train)
-        bottom.addLayout(middle)
-        bottom.addStretch()
+        controls = QtWidgets.QWidget()
+        lay = QtWidgets.QHBoxLayout(controls)
+        lay.addWidget(fields)
+        lay.addStretch()
+        scroll = QtWidgets.QScrollArea()          # на маленьком экране поля прокручиваются
+        scroll.setWidget(controls)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+        # Граница между графиками и полями двигается мышью.
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        splitter.addWidget(plots)
+        splitter.addWidget(scroll)
+        splitter.setStretchFactor(0, 1)           # лишнее место - графикам
+        splitter.setStretchFactor(1, 0)
 
         main = QtWidgets.QVBoxLayout(self)
-        for p in (self.plot_u, self.plot_vac, self.plot_vu):
-            main.addWidget(p, stretch=1)
-        main.addLayout(bottom)
+        main.addWidget(splitter)
         main.addWidget(self.msg)
 
     # ------------------------------------------------------------------
