@@ -130,9 +130,12 @@ def main(count=3, port=45450, config_name="fake_config.json"):
     try:
         context = MultiDeviceTestContext(devices, host="127.0.0.1", port=port, process=False)
         context.__enter__()
-    except RuntimeError:
-        sys.exit(f"Не удалось запустить стенд: порт {port} занят? Закрой другой fake_rf.py "
-                 f"или укажи другой порт: python fake_server/fake_rf.py 3 45460")
+    except Exception:
+        import traceback
+        traceback.print_exc()                   # настоящая причина - пригодится для разбора
+        sys.exit(f"\nНе удалось запустить стенд на порту {port} (причина - текст выше).\n"
+                 f"Если порт занят - другой порт (1024..65535): python fake_server/fake_rf.py 3 50000\n"
+                 f"Проверить, кто держит порт:  netstat -ano | findstr :{port}")
     try:
         config = {
             "tick_ms": 1000,
