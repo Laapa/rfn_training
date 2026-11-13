@@ -9,7 +9,7 @@
 |---|---|---|
 | `trainer/core.py` | алгоритм тренировки (автомат состояний) | ничего |
 | `trainer/sim.py`  | симулятор резонатора | ничего |
-| `trainer/tango_res.py` *(позже)* | резонатор через Tango `DeviceProxy`, имена — из config | PyTango |
+| `trainer/tango_res.py` | резонатор через Tango: `<prefix>/mod`, `cav`, `sspa` (prefix из config, напр. `rf2/1e2`) | PyTango 9.5.1 (стенд — Tango 9.3.4, ПК — Python 3.12) |
 | `gui/` | окно «Обзор» (таблица, галка = показать окно резонатора) + отдельное окно на каждый резонатор в пол-экрана | PyQt5, pyqtgraph |
 
 ## Алгоритм (решения)
