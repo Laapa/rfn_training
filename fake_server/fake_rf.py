@@ -15,20 +15,21 @@
   - выше «натренированного» напряжения случаются пробои: вакуум скачет и откачивается,
     резонатор понемногу тренируется (порог растёт)
   - вакуум хуже TRIP_TORR -> блокировка: ВЧ выключается, ModSt = False.
-    Снять: команда RstAll (кнопка «Сброс»), потом ModOn («Вкл МОД»)
+    Снять: команда RstAll (кнопка «Сброс»), потом ModOn («Вкл МОД») - когда вакуум откачается
+    (пока он хуже TRIP_TORR, блокировка сработает снова, как на настоящем стенде)
   - cav/Spike() - устроить пробой вручную (для проверки)
 """
 import json
 import os
 import sys
+import tempfile
 import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tango import AttrWriteType                                   # noqa: E402
-from tango.server import Device, attribute, command               # noqa: E402
-from tango.test_context import MultiDeviceTestContext             # noqa: E402
+from tango.server import Device, attribute, command, run          # noqa: E402
 
 from trainer.sim import SimResonator                              # noqa: E402
 
@@ -125,38 +126,33 @@ def main(count=3, port=45450, config_name="fake_config.json"):
     prefixes = [f"rf{k + 2}/1e{k + 2}" for k in range(count)]
     for k, p in enumerate(prefixes):       # rf2 «чистый» до 8 кВ, rf3 - до 11, rf4 - до 14 ...
         PLANTS[p] = Plant(k)
-    devices = [{"class": cls, "devices": [{"name": f"{p}/{d}"} for p in prefixes]}
-               for cls, d in ((Mod, "mod"), (Cav, "cav"), (Sspa, "sspa"))]
-    try:
-        context = MultiDeviceTestContext(devices, host="127.0.0.1", port=port, process=False)
-        context.__enter__()
-    except Exception:
-        import traceback
-        traceback.print_exc()                   # настоящая причина - пригодится для разбора
-        sys.exit(f"\nНе удалось запустить стенд на порту {port} (причина - текст выше).\n"
-                 f"Если порт занят - другой порт (1024..65535): python fake_server/fake_rf.py 3 50000\n"
-                 f"Проверить, кто держит порт:  netstat -ano | findstr :{port}")
-    try:
-        config = {
-            "tick_ms": 1000,
-            "data_dir": "data_fake",
-            "resonators": [{"name": f"Фейк {p}", "type": "tango", "nodb": True,
-                            "prefix": f"tango://127.0.0.1:{port}/{p}"} for p in prefixes],
-        }
-        if not os.path.exists(config_name):        # не затираем, если там уже сохранены настройки
-            with open(config_name, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=4, ensure_ascii=False)
-            print(f"Создан {config_name}")
+
+    config = {
+        "tick_ms": 1000,
+        "data_dir": "data_fake",
+        "resonators": [{"name": f"Фейк {p}", "type": "tango", "nodb": True,
+                        "prefix": f"tango://127.0.0.1:{port}/{p}"} for p in prefixes],
+    }
+    if not os.path.exists(config_name):        # не затираем, если там уже сохранены настройки
+        with open(config_name, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        print(f"Создан {config_name}")
+
+    # Вместо базы Tango - маленький файл с описанием устройств (так Tango умеет работать без базы)
+    db_file = os.path.join(tempfile.gettempdir(), "fake_rf_db.txt")
+    with open(db_file, "w") as f:
+        for cls, d in (("Mod", "mod"), ("Cav", "cav"), ("Sspa", "sspa")):
+            f.write(f"FakeRF/fake/DEVICE/{cls}: " + ", ".join(f"{p}/{d}" for p in prefixes) + "\n")
+
+    def ready():
         print(f"Фейковый стенд работает на порту {port}: " + ", ".join(prefixes))
         print(f"Запусти программу:  python main.py {config_name}")
         print("Остановить стенд: Ctrl+C (так же можно проверить обрыв связи)")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("Стенд остановлен")
-    finally:
-        context.__exit__(None, None, None)
+
+    # обычный запуск device-сервера, как у настоящих, в основном потоке
+    run((Mod, Cav, Sspa),
+        args=["FakeRF", "fake", "-ORBendPoint", f"giop:tcp:127.0.0.1:{port}", f"-file={db_file}"],
+        post_init_callback=ready)
 
 
 if __name__ == "__main__":
