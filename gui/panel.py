@@ -1,5 +1,5 @@
-"""Вкладка одного резонатора: графики сверху, все поля ввода под ними
-(узкое окно, чтобы на мониторе помещалось два)."""
+"""Окно одного резонатора: графики сверху, все поля ввода под ними
+(узкое окно, чтобы на мониторе помещалось два резонатора рядом)."""
 import math
 import time
 
@@ -45,6 +45,7 @@ def spin(value, maximum, suffix, handler):
 class ResonatorPanel(QtWidgets.QWidget):
     def __init__(self, name, trainer):
         super().__init__()
+        self.setWindowTitle(name)
         self.name = name
         self.tr = trainer
         self.tr.log = self.add_log
@@ -125,10 +126,8 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.box_manual = QtWidgets.QGroupBox("Ручное управление U")
         self.box_manual.setLayout(f)
 
-        # ---------- Журнал ----------
-        self.log_view = QtWidgets.QPlainTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumBlockCount(1000)
+        # ---------- Последнее сообщение (ошибки ввода, шаги алгоритма) ----------
+        self.msg = QtWidgets.QLabel()
 
         # ---------- Раскладка: графики сверху, поля снизу ----------
         middle = QtWidgets.QVBoxLayout()
@@ -139,12 +138,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         bottom = QtWidgets.QHBoxLayout()
         bottom.addWidget(box_train)
         bottom.addLayout(middle)
-        bottom.addWidget(self.log_view, stretch=1)
+        bottom.addStretch()
 
         main = QtWidgets.QVBoxLayout(self)
         for p in (self.plot_u, self.plot_vac, self.plot_vu):
             main.addWidget(p, stretch=1)
         main.addLayout(bottom)
+        main.addWidget(self.msg)
 
     # ------------------------------------------------------------------
 
@@ -172,7 +172,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         return edit
 
     def add_log(self, msg):
-        self.log_view.appendPlainText(f"{time.strftime('%H:%M:%S')}  {msg}")
+        self.msg.setText(f"{time.strftime('%H:%M:%S')}  {msg}")
 
     def on_auto(self, checked):
         if checked:
