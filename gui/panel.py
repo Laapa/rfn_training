@@ -63,20 +63,20 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.vac_u = VacUWindow(name)
         s, res = trainer.s, trainer.res
 
-        # ========================= Графики =========================
+        # ========================= Графики (главное - им всё свободное место) =========================
         self.plot_u = pg.PlotWidget(background=style.PLOT_BG, axisItems={"bottom": pg.DateAxisItem()})
-        self.plot_u.setTitle("Voltage (kV)", color="y", size="12pt")
+        self.plot_u.setTitle("Voltage (kV)", color="y", size="10pt")
         self.plot_u.addLegend(offset=(10, 5))
         self.curve_u = self.plot_u.plot(pen=pg.mkPen((255, 0, 0)), name="U резонатора")
         self.curve_u_set = self.plot_u.plot(pen=pg.mkPen("y", style=QtCore.Qt.DashLine), name="уставка")
         self.plot_vac = pg.PlotWidget(background=style.PLOT_BG,
                                       axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
-        self.plot_vac.setTitle("Vacuum (torr)", color="y", size="12pt")
+        self.plot_vac.setTitle("Vacuum (torr)", color="y", size="10pt")
         self.plot_vac.setLogMode(y=True)
         self.curve_vac = self.plot_vac.plot(pen=pg.mkPen((255, 0, 0)))
         self.lines = {}   # пороги пунктиром тех же цветов
         for attr, color in THRESHOLDS:
-            self.lines[attr] = pg.InfiniteLine(angle=0, pen=pg.mkPen(style.color(color), width=1.5,
+            self.lines[attr] = pg.InfiniteLine(angle=0, pen=pg.mkPen(style.color(color), width=2,
                                                                       style=QtCore.Qt.DashLine))
             self.plot_vac.addItem(self.lines[attr])
         for p in (self.plot_u, self.plot_vac):
@@ -86,35 +86,44 @@ class ResonatorPanel(QtWidgets.QWidget):
             p.setMinimumHeight(80)
         self.plot_vac.setXLink(self.plot_u)
 
+        # над графиками: крупные I насоса / U / U НО (были внизу старой «Главной») и кнопки
+        self.foot = {"pump": value_box(), "u": value_box(), "u_no": value_box()}
+        top = QtWidgets.QHBoxLayout()
+        for key, text, unit in (("pump", "I насоса", "A"), ("u", "U резонатора", "кВ"),
+                                ("u_no", "U рез НО", "кВ")):
+            top.addWidget(QtWidgets.QLabel(text))
+            top.addWidget(self.foot[key])
+            top.addWidget(QtWidgets.QLabel(unit))
+            top.addSpacing(8)
+        top.addStretch()
         self.units = QtWidgets.QPushButton("A")        # как в старой программе: A <-> торр
-        self.units.setFixedWidth(60)
+        self.units.setToolTip("Показывать вакуум в торрах или ток насоса в амперах")
         self.units.clicked.connect(self.on_units)
         btn_vu = QtWidgets.QPushButton("Вакуум от U ↗")
         btn_vu.clicked.connect(lambda: (self.vac_u.show(), self.vac_u.raise_()))
-        top = QtWidgets.QHBoxLayout()
-        top.addStretch()
-        top.addWidget(QtWidgets.QLabel("Вакуум в:"))
         top.addWidget(self.units)
         top.addWidget(btn_vu)
         box_plots = QtWidgets.QGroupBox("Графики")
         style.group(box_plots, "darkblue")
         lay = QtWidgets.QVBoxLayout(box_plots)
+        lay.setSpacing(4)
         lay.addLayout(top)
         lay.addWidget(self.plot_u)
         lay.addWidget(self.plot_vac)
 
-        # ========================= Данные =========================
+        # ========================= Данные (две колонки) =========================
         self.data = {}
         rows = (("u", "U резонатора", "кВ"), ("i", "I фидера", "A"), ("vac", "Вакуум", "Торр"),
                 ("pump", "I насоса", "A"), ("p_fwd", "Падающая", "кВт"), ("p_ref", "Отраженная", "кВт"),
                 ("phase", "Фазометр", "грд"), ("u_no", "U резонатора НО", "кВ"))
         grid = QtWidgets.QGridLayout()
-        for r, (key, text, unit) in enumerate(rows):
+        for k, (key, text, unit) in enumerate(rows):
+            r, c = k % 4, (k // 4) * 3
             self.data[key] = value_box()
-            grid.addWidget(QtWidgets.QLabel(text), r, 0)
-            grid.addWidget(self.data[key], r, 1)
-            grid.addWidget(QtWidgets.QLabel(unit), r, 2)
-        grid.setVerticalSpacing(3)
+            grid.addWidget(QtWidgets.QLabel(text), r, c)
+            grid.addWidget(self.data[key], r, c + 1)
+            grid.addWidget(QtWidgets.QLabel(unit), r, c + 2)
+        grid.setColumnMinimumWidth(3, 0)
         box_data = QtWidgets.QGroupBox("Данные")
         style.group(box_data, "cyan")
         box_data.setLayout(grid)
@@ -125,7 +134,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         for r, (attr, color) in enumerate(THRESHOLDS):
             amps, torr = QtWidgets.QLineEdit(), QtWidgets.QLineEdit()
             for e in (amps, torr):
-                e.setFixedWidth(90)
+                e.setFixedWidth(80)
                 e.setFont(MONO)
                 e.setStyleSheet(f"color: {style.color(color)}")
             amps.returnPressed.connect(lambda a=attr: self.set_threshold(a, True))
@@ -142,6 +151,65 @@ class ResonatorPanel(QtWidgets.QWidget):
         box_vac = QtWidgets.QGroupBox("Вакуум")
         style.group(box_vac, "green")
         box_vac.setLayout(grid)
+
+        # ========================= Лампочки =========================
+        self.lamp_ready, self.lamp_agc_u, self.lamp_agc_i = Lamp(), Lamp(), Lamp()
+        lamps = QtWidgets.QGridLayout()
+        for r, (lamp, text) in enumerate(((self.lamp_ready, "Готовность"),
+                                          (self.lamp_agc_u, "АРУ: U"), (self.lamp_agc_i, "АРУ: I"))):
+            lamps.addWidget(lamp, r, 0)
+            lamps.addWidget(QtWidgets.QLabel(text), r, 1)
+
+        # ========================= Автоматическое управление =========================
+        self.slider_auto = PrecisionSlider(["0.1", "1", "10"], [(0.1, 1, 10)])
+        self.seq = QtWidgets.QComboBox()
+        self.seq.addItems([UP, DOWN, ZONE, SAW])
+        self.seq.setCurrentText(s.sequence)
+        self.seq.setFixedWidth(150)
+        self.seq.currentTextChanged.connect(self.on_sequence)
+        self.high = ArrowField(s.high, "кВ", lambda v: self.set_param("high", v), self.slider_auto.step)
+        self.low = ArrowField(s.low, "кВ", lambda v: self.set_param("low", v), self.slider_auto.step)
+
+        grid = QtWidgets.QGridLayout()
+        grid.setVerticalSpacing(4)
+        for r, (text, w) in enumerate((("Sequence", self.seq), ("U MAX", self.high), ("U MIN", self.low))):
+            grid.addWidget(QtWidgets.QLabel(text), r, 0)
+            grid.addWidget(w, r, 1)
+        for r, (text, attr, unit) in enumerate((("Шаг", "step", "кВ"),
+                                                 ("Response Delay", "response_delay", "с"),
+                                                 ("Timeout", "timeout", "с"))):
+            grid.addWidget(QtWidgets.QLabel(text), r, 2)
+            grid.addWidget(self.enter_field(attr), r, 3)
+            grid.addWidget(QtWidgets.QLabel(unit), r, 4)
+        grid.addWidget(self.slider_auto, 0, 5, 3, 1)
+
+        # нижняя строка: Start ● Stop Reverse | стрелки направления, Start → Stop, состояние
+        self.btn_start = QtWidgets.QPushButton("Start")
+        self.btn_stop = QtWidgets.QPushButton("Stop")
+        self.btn_rev = QtWidgets.QPushButton("Reverse")
+        self.lamp_auto = Lamp()
+        self.btn_start.clicked.connect(lambda: self.tr.set_paused(False))
+        self.btn_stop.clicked.connect(lambda: self.tr.set_paused(True))
+        self.btn_rev.clicked.connect(self.tr.reverse)
+        self.arrow_up, self.arrow_down = QtWidgets.QLabel("▲"), QtWidgets.QLabel("▼")   # направление
+        self.state_lbl = QtWidgets.QLabel()
+        self.state_lbl.setWordWrap(True)          # длинный текст переносится, а не распирает группу
+        self.state_lbl.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        bottom = QtWidgets.QHBoxLayout()
+        for w in (self.btn_start, self.lamp_auto, self.btn_stop, self.btn_rev):
+            bottom.addWidget(w)
+        bottom.addSpacing(10)
+        bottom.addWidget(self.arrow_up)
+        bottom.addWidget(self.arrow_down)
+        bottom.addWidget(self.state_lbl, stretch=1)
+
+        self.box_auto = QtWidgets.QGroupBox("Автоматическое управление")
+        style.group(self.box_auto, "gray")
+        self.shown_auto = False                       # какой режим сейчас нарисован (рамки)
+        auto_lay = QtWidgets.QVBoxLayout(self.box_auto)
+        auto_lay.setSpacing(4)
+        auto_lay.addLayout(grid)
+        auto_lay.addLayout(bottom)
 
         # ========================= Ручное управление =========================
         self.slider_manual = PrecisionSlider(["0.1/0.01", "1/0.1", "10/1"],
@@ -160,96 +228,33 @@ class ResonatorPanel(QtWidgets.QWidget):
         style.group(self.box_manual, "red", True)     # MANUAL - активна, красная рамка
         self.box_manual.setLayout(grid)
 
-        # ========================= Лампочки =========================
-        self.lamp_ready, self.lamp_agc_u, self.lamp_agc_i = Lamp(), Lamp(), Lamp()
-        lamps = QtWidgets.QGridLayout()
-        for r, (lamp, text) in enumerate(((self.lamp_ready, "Готовность"),
-                                          (self.lamp_agc_u, "АРУ: U"), (self.lamp_agc_i, "АРУ: I"))):
-            lamps.addWidget(lamp, r, 0)
-            lamps.addWidget(QtWidgets.QLabel(text), r, 1)
-        lamps.setRowStretch(4, 1)
-
-        # ========================= Автоматическое управление =========================
-        self.btn_start = QtWidgets.QPushButton("Start")
-        self.btn_stop = QtWidgets.QPushButton("Stop")
-        self.btn_rev = QtWidgets.QPushButton("Reverse")
-        self.lamp_auto = Lamp()
-        self.btn_start.clicked.connect(lambda: self.tr.set_paused(False))
-        self.btn_stop.clicked.connect(lambda: self.tr.set_paused(True))
-        self.btn_rev.clicked.connect(self.tr.reverse)
-        col1 = QtWidgets.QVBoxLayout()
-        col1.addWidget(self.btn_start)
-        col1.addWidget(self.lamp_auto, alignment=QtCore.Qt.AlignCenter)
-        col1.addWidget(self.btn_stop)
-        col1.addWidget(self.btn_rev)
-
-        self.arrow_up, self.arrow_down = QtWidgets.QLabel("▲"), QtWidgets.QLabel("▼")   # направление
-        col2 = QtWidgets.QVBoxLayout()
-        col2.addWidget(self.arrow_up)
-        col2.addWidget(self.arrow_down)
-
-        self.slider_auto = PrecisionSlider(["0.1", "1", "10"], [(0.1, 1, 10)])
-        self.seq = QtWidgets.QComboBox()
-        self.seq.addItems([UP, DOWN, ZONE, SAW])
-        self.seq.setCurrentText(s.sequence)
-        self.seq.currentTextChanged.connect(self.on_sequence)
-        self.high = ArrowField(s.high, "кВ", lambda v: self.set_param("high", v), self.slider_auto.step)
-        self.low = ArrowField(s.low, "кВ", lambda v: self.set_param("low", v), self.slider_auto.step)
-        self.start_stop = QtWidgets.QLabel()
-        col3 = QtWidgets.QGridLayout()
-        for r, (text, w) in enumerate((("Sequence", self.seq), ("U MAX", self.high),
-                                        ("U MIN", self.low), ("Start → Stop", self.start_stop))):
-            col3.addWidget(QtWidgets.QLabel(text), r, 0)
-            col3.addWidget(w, r, 1)
-
-        col5 = QtWidgets.QGridLayout()
-        for r, (text, attr, unit) in enumerate((("Шаг", "step", "кВ"),
-                                                 ("Response Delay", "response_delay", "с"),
-                                                 ("Timeout", "timeout", "с"))):
-            col5.addWidget(QtWidgets.QLabel(text), r, 0)
-            col5.addWidget(self.enter_field(attr), r, 1)
-            col5.addWidget(QtWidgets.QLabel(unit), r, 2)
-        self.state_lbl = QtWidgets.QLabel()
-        self.state_lbl.setWordWrap(True)
-        col5.addWidget(self.state_lbl, 3, 0, 1, 3)
-
-        auto_lay = QtWidgets.QHBoxLayout()
-        for c in (col1, col2, col3):
-            auto_lay.addLayout(c)
-        auto_lay.addWidget(self.slider_auto)
-        auto_lay.addLayout(col5)
-        self.box_auto = QtWidgets.QGroupBox("Автоматическое управление")
-        style.group(self.box_auto, "gray")
-        self.shown_auto = False                       # какой режим сейчас нарисован (рамки)
-        self.box_auto.setLayout(auto_lay)
-
+        # ========================= Тумблер AUTO / MANUAL =========================
         self.toggle = Toggle()
         self.toggle.clicked.connect(self.on_auto)      # clicked - только от пользователя
         self.mode = QtWidgets.QLabel("MANUAL")
         self.mode.setAlignment(QtCore.Qt.AlignCenter)
-        self.mode.setStyleSheet("font-weight: bold; font-size: 12pt")
-        toggle_col = QtWidgets.QVBoxLayout()
-        toggle_col.addStretch()
-        toggle_col.addWidget(self.toggle, alignment=QtCore.Qt.AlignCenter)
-        toggle_col.addWidget(self.mode)
-        toggle_col.addStretch()
+        self.mode.setStyleSheet("font-weight: bold; font-size: 11pt")
+        # лампочки и под ними тумблер - одной колонкой справа от «Вакуума»
+        side = QtWidgets.QVBoxLayout()
+        side.addLayout(lamps)
+        side.addWidget(self.toggle, alignment=QtCore.Qt.AlignCenter)
+        side.addWidget(self.mode)
+        side.addStretch()
 
-        # ========================= Сборка средней части =========================
-        mid_col = QtWidgets.QVBoxLayout()
-        mid_col.addWidget(box_vac)
-        mid_col.addWidget(self.box_manual)
+        # ========================= Две плотные строки управления =========================
         row1 = QtWidgets.QHBoxLayout()
         row1.addWidget(box_data)
-        row1.addLayout(mid_col)
-        row1.addLayout(lamps)
+        row1.addWidget(box_vac)
+        row1.addLayout(side)
         row1.addStretch(1)
         row2 = QtWidgets.QHBoxLayout()
         row2.addWidget(self.box_auto)
-        row2.addLayout(toggle_col)
+        row2.addWidget(self.box_manual)
         row2.addStretch(1)
         controls = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(controls)
         lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
         lay.addLayout(row1)
         lay.addLayout(row2)
         self.controls = controls
@@ -265,38 +270,29 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 0)
 
-        # ========================= Нижняя панель =========================
+        # ========================= Нижняя строка =========================
         self.clock = QtWidgets.QLineEdit()
         self.clock.setReadOnly(True)
-        self.clock.setFont(QtGui.QFont("Consolas", 13))
+        self.clock.setFont(QtGui.QFont("Consolas", 11))
         self.clock.setFixedWidth(self.clock.fontMetrics().horizontalAdvance(
             "2026-11-13 00:00:00 воскресенье") + 20)
-        self.foot = {"pump": value_box(), "u": value_box(), "u_no": value_box()}
-        vals = QtWidgets.QGridLayout()
-        for r, (key, text, unit) in enumerate((("pump", "I насоса", "A"), ("u", "U резонатора", "кВ"),
-                                                ("u_no", "U рез НО", "кВ"))):
-            vals.addWidget(QtWidgets.QLabel(text), r, 0)
-            vals.addWidget(self.foot[key], r, 1)
-            vals.addWidget(QtWidgets.QLabel(unit), r, 2)
         new_session = QtWidgets.QPushButton("Новая сессия")
-        new_session.setMinimumHeight(40)
         new_session.clicked.connect(self.on_new_session)
-        buttons = QtWidgets.QGridLayout()
-        for k, (text, command) in enumerate((("Сброс ГЕН", res.reset_gen), ("Сброс ББ", res.reset_bb),
-                                             ("Вкл МОД", res.mod_on), ("Выкл МОД", res.mod_off))):
-            b = QtWidgets.QPushButton(text)
-            b.clicked.connect(lambda _, t=text, c=command: self.command(t, c))
-            buttons.addWidget(b, k // 2, k % 2)
         foot = QtWidgets.QHBoxLayout()
         foot.addWidget(self.clock)
-        foot.addStretch(1)
-        foot.addLayout(vals)
         foot.addWidget(new_session)
-        foot.addLayout(buttons)
+        foot.addStretch(1)
+        for text, command in (("Сброс ГЕН", res.reset_gen), ("Сброс ББ", res.reset_bb),
+                              ("Вкл МОД", res.mod_on), ("Выкл МОД", res.mod_off)):
+            b = QtWidgets.QPushButton(text)
+            b.clicked.connect(lambda _, t=text, c=command: self.command(t, c))
+            foot.addWidget(b)
 
         self.status = QtWidgets.QLabel()          # строка внизу: запись в файл и сообщения
         self.status.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
         main = QtWidgets.QVBoxLayout(self)
+        main.setContentsMargins(8, 6, 8, 4)
+        main.setSpacing(4)
         main.addWidget(self.splitter, stretch=1)
         main.addLayout(foot)
         main.addWidget(self.status)
@@ -304,11 +300,17 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.status.setText(self.file_msg)
 
     def fit_controls(self):
-        """Поля управления всегда видны целиком; только на совсем маленьком экране - прокрутка."""
-        screen_h = QtWidgets.QApplication.primaryScreen().availableGeometry().height()
-        need = min(self.controls.sizeHint().height() + 4, screen_h - 450)
+        """Графики в приоритете: поля управления занимают не больше 45% высоты окна.
+        Если им этого мало (маленькое окно) - появляется прокрутка."""
+        need = min(self.controls.sizeHint().height() + 4, int(self.height() * 0.45))
         if self.scroll.minimumHeight() != need:
             self.scroll.setMinimumHeight(need)
+            total = sum(self.splitter.sizes())
+            self.splitter.setSizes([total - need, need])   # всё остальное - графикам
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.fit_controls()
 
     # ------------------------------------------------------------------ обработчики
 
@@ -454,9 +456,9 @@ class ResonatorPanel(QtWidgets.QWidget):
         going_up = auto and tr.direction > 0
         going_down = auto and tr.direction < 0
         for arrow, on in ((self.arrow_up, going_up), (self.arrow_down, going_down)):
-            arrow.setStyleSheet(f"font-size: 26pt; color: {style.C['green'] if on else style.C['gray']}")
-        self.start_stop.setText(f"{tr.start:g} → {tr.stop:g} кВ")
-        self.state_lbl.setText(("Пауза · " if auto and tr.paused else "") + STATE_TEXT[tr.state])
+            arrow.setStyleSheet(f"font-size: 14pt; color: {style.C['green'] if on else style.C['gray']}")
+        self.state_lbl.setText(f"{tr.start:g} → {tr.stop:g} кВ · "
+                               + ("Пауза · " if auto and tr.paused else "") + STATE_TEXT[tr.state])
         if self.seq.currentText() != s.sequence:   # Reverse мог поменять UP <-> DOWN
             self.seq.blockSignals(True)
             self.seq.setCurrentText(s.sequence)

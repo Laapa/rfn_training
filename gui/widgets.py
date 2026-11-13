@@ -42,7 +42,7 @@ class Toggle(QtWidgets.QCheckBox):
         p.drawEllipse(38 if self.isChecked() else 4, 4, 30, 30)
 
 
-def value_box(width=90):
+def value_box(width=80):
     """Поле только для чтения - так в старой программе показывались измерения."""
     box = QtWidgets.QLineEdit()
     box.setReadOnly(True)
@@ -109,7 +109,7 @@ class PrecisionSlider(QtWidgets.QWidget):
         self.slider.setRange(0, 2)
         self.slider.setValue(1)
         self.slider.setInvertedAppearance(True)       # верх = точно
-        self.slider.setFixedHeight(70)
+        self.slider.setFixedHeight(60)
         grid = QtWidgets.QGridLayout(self)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setVerticalSpacing(0)

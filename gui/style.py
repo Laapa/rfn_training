@@ -21,12 +21,12 @@ THEMES = {   # окно, карточки, поля только-для-чтен
 
 QSS = """
 QPushButton { background: palette(button); border: 1px solid palette(mid); border-radius: 8px;
-              padding: 5px 14px; }
+              padding: 3px 12px; }
 QPushButton:hover { border-color: %(accent)s; }
 QPushButton:pressed { background: %(accent)s; color: white; }
 QPushButton:disabled { color: palette(mid); }
 QLineEdit, QComboBox { background: palette(base); border: 1px solid palette(mid); border-radius: 6px;
-                       padding: 3px 6px; selection-background-color: %(accent)s; }
+                       padding: 2px 5px; selection-background-color: %(accent)s; }
 QLineEdit:focus, QComboBox:focus { border: 1px solid %(accent)s; }
 QLineEdit[readOnly="true"] { background: palette(alternate-base); border: 1px solid transparent; }
 QLineEdit:disabled { color: palette(mid); }
@@ -47,7 +47,7 @@ def group(box, color, active=False):
     c = C[color]
     box.setStyleSheet(
         f"QGroupBox {{ background: palette(base); border: {3 if active else 2}px solid {c};"
-        " border-radius: 12px; margin-top: 10px; padding: 10px 6px 4px 6px; }"
+        " border-radius: 10px; margin-top: 9px; padding: 8px 4px 2px 4px; }"
         f"QGroupBox::title {{ subcontrol-origin: margin; left: 14px; padding: 2px 10px;"
         f" background: {c}; color: white; border-radius: 6px; font-weight: 600; }}")
 
