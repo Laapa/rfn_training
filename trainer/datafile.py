@@ -27,7 +27,8 @@ class DataFile:
     def write(self, m, vacuum, setpoint, current, mode):
         stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cols = [f"{m['u']:.1f}", f"{m['i']:.1f}", f"{m['pump_a']:7.1e}", f"{vacuum:8.2e}",
-                f"{m['p_fwd']:.2f}", f"{m['p_ref']:.2f}", f"{m['phase']:.2f}",
+                f"{m['p_fwd']:.2f}", f"{m['p_ref']:.2f}",
+                "nan" if m["phase"] is None else f"{m['phase']:.2f}",
                 f"{setpoint:.2f}", f"{current:.2f}", mode]
         self.file.write(stamp + "\t" + "\t".join(cols) + "\n")
         self.file.flush()

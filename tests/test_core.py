@@ -1,6 +1,6 @@
 """Проверки алгоритма. Запуск:  python -m tests.test_core
 (переписывать не обязательно - это моя страховка, что алгоритм работает по README)"""
-from trainer.core import Trainer, Settings, UP, DOWN, ZONE, SAW, MANUAL, DELAY, WAIT_GOOD, BACKOFF
+from trainer.core import Trainer, Settings, DOWN, ZONE, SAW, MANUAL, DELAY, WAIT_GOOD, BACKOFF
 
 GOOD, GRAY, BAD, VERY_BAD = 1e-9, 3e-9, 6e-9, 2e-8
 
@@ -153,6 +153,23 @@ def test_zone_reverses():
         tr.tick(t)
         seen.add(res.u)
     assert 20 in seen and 22 in seen and tr.state != MANUAL
+
+
+def test_link_error_goes_manual():
+    res, tr = make(21)
+    tr.enable(0)
+
+    def broken():
+        raise IOError("нет связи")
+    res.read_vacuum = broken
+    tr.tick(1)
+    assert tr.state == MANUAL and res.u == 21     # напряжение не тронули
+
+
+def test_high_limit():
+    res, tr = make(21)
+    tr.s.high = 31
+    assert tr.s.check() != ""
 
 
 def test_refuse_past_stop():

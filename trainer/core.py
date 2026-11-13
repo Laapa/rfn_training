@@ -20,8 +20,8 @@ BACKOFF = "BACKOFF"      # был Very Bad: отступили назад, жд�
 
 @dataclass
 class Settings:
-    low: float = 20.0             # Low KV
-    high: float = 50.0            # High KV
+    low: float = 5.0              # Low KV
+    high: float = 25.0            # High KV
     step: float = 0.5             # Step KV
     sequence: str = UP
     response_delay: float = 10.0  # с
@@ -30,6 +30,7 @@ class Settings:
     bad: float = 5e-9
     very_bad: float = 1e-8
     back_steps: int = 3
+    u_limit: float = 30.0         # больше этого устройство не умеет (UcavSetpoint 0..30 кВ)
 
     def check(self):
         """Пустая строка, если настройки в порядке, иначе текст ошибки."""
@@ -37,6 +38,8 @@ class Settings:
             return "Step должен быть больше 0"
         if self.low >= self.high:
             return "Low должен быть меньше High"
+        if self.low < 0 or self.high > self.u_limit:
+            return f"Low и High должны быть в пределах 0..{self.u_limit:g} кВ"
         if not self.good < self.bad < self.very_bad:
             return "Нужно Good < Bad < Very Bad"
         return ""
@@ -86,6 +89,15 @@ class Trainer:
         self.log("MANUAL")
 
     def tick(self, now):
+        """Один шаг алгоритма. Любая ошибка связи с устройством -> MANUAL, напряжение не трогаем."""
+        try:
+            self._tick(now)
+        except Exception as e:
+            if self.state != MANUAL:
+                self.log(f"Ошибка связи: {e}. Тренировка остановлена")
+                self.disable()
+
+    def _tick(self, now):
         vac = self.res.read_vacuum()   # вакуум читаем всегда, даже в MANUAL
         self.vacuum = vac
         if self.state == MANUAL:

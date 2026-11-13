@@ -9,7 +9,7 @@
     read_setpoint()      -> уставка U, кВ          set_voltage(kv)
     read_current()       -> уставка I фидера, А    set_current(a)
     read_measurements()  -> словарь измерений (см. ниже)
-    reset_gen(), reset_bb(), mod_on(), mod_off()   - кнопки
+    reset_all(), mod_on(), mod_off()               - кнопки (RstAll, ModOn, ModOff)
     connected            -> есть ли связь с устройством
 """
 import math
@@ -69,10 +69,7 @@ class SimResonator:
         }
 
     # Кнопки нижней панели
-    def reset_gen(self):
-        pass
-
-    def reset_bb(self):
+    def reset_all(self):
         pass
 
     def mod_on(self):

@@ -13,10 +13,14 @@ DEFAULTS = {
     "history_s": 7200,      # сколько секунд держать на графиках (x_time)
     "data_dir": "data",     # куда писать .dat
     "dark_theme": False,    # тёмная тема (галка в окне «Обзор»)
-    "resonators": [         # type: "sim" сейчас, "tango" - когда будут атрибуты
-        {"name": "Резонатор 1", "type": "sim"},
-        {"name": "Резонатор 2", "type": "sim"},
-        {"name": "Резонатор 3", "type": "sim"},
+    "u_max_kv": 30.0,       # предел уставки U (UcavSetpoint 0..30 кВ)
+    "i_max_a": 10.0,        # предел уставки I фидера (IfidSetpoint 0..10 А)
+    "tango_host": "",       # например "host:10000"; пусто - берётся из переменной TANGO_HOST
+    "vac_is_current": False,  # True, если cav/Vac отдаёт ток насоса (А), а не Торр
+    "resonators": [         # type: "sim" - симулятор, "tango" - настоящий (prefix: rf2/1e2 -> rf2/1e2/mod ...)
+        {"name": "Резонатор 1", "type": "sim", "prefix": "rf2/1e2"},
+        {"name": "Резонатор 2", "type": "sim", "prefix": ""},
+        {"name": "Резонатор 3", "type": "sim", "prefix": ""},
     ],
 }
 

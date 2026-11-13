@@ -1,6 +1,8 @@
 """Запуск программы.   python main.py"""
 import sys
 
+import os
+
 from PyQt5 import QtWidgets, QtCore
 
 from gui import style
@@ -10,14 +12,18 @@ from trainer.sim import SimResonator
 
 
 def make_resonators(config):
-    """Резонаторы из training_config.json. Пока только симуляторы, Tango - позже."""
+    """Резонаторы из training_config.json: "sim" - симулятор, "tango" - настоящий."""
+    if config["tango_host"]:
+        os.environ["TANGO_HOST"] = config["tango_host"]
     result = []
     for i, item in enumerate(config["resonators"]):
-        if item["type"] != "sim":
-            raise SystemExit(f"{item['name']}: тип {item['type']} ещё не поддерживается")
-        res = SimResonator(conditioned=24 + 3 * i, seed=i,             # каждый «грязный» по-своему
-                           vac_coeff=config["vac_coeff"], r_sh=config["r_sh"])
-        res.set_voltage(20.0)
+        if item["type"] == "tango":
+            from trainer.tango_res import TangoResonator   # PyTango нужен только для железа
+            res = TangoResonator(item["prefix"], config["vac_coeff"], config["vac_is_current"])
+        else:
+            res = SimResonator(conditioned=14 + 3 * i, seed=i,         # каждый «грязный» по-своему
+                               vac_coeff=config["vac_coeff"], r_sh=config["r_sh"])
+            res.set_voltage(10.0)
         result.append((item["name"], res))
     return result
 

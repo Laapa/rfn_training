@@ -8,7 +8,7 @@ from trainer.sim import SimResonator
 res = SimResonator(seed=1)
 res.set_voltage(20.0)
 
-settings = Settings(low=20, high=40, step=0.5, sequence=UP,
+settings = Settings(low=20, high=30, step=0.5, sequence=UP,
                     response_delay=5, timeout=20,
                     good=2e-9, bad=5e-9, very_bad=1e-8)
 

@@ -38,7 +38,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.panels = []
         for row, (name, res) in enumerate(resonators):
-            self.panels.append(ResonatorPanel(name, Trainer(res, Settings()), config))
+            self.panels.append(ResonatorPanel(name, Trainer(res, Settings(u_limit=config["u_max_kv"])), config))
             for col in range(len(COLUMNS)):          # ячейки создаём один раз
                 self.table.setItem(row, col, QtWidgets.QTableWidgetItem())
             first = self.table.item(row, 0)
@@ -81,11 +81,14 @@ class MainWindow(QtWidgets.QMainWindow):
         for row, panel in enumerate(self.panels):
             tr = panel.tr
             tr.tick(self.now)
-            panel.update_view(self.now)
+            try:
+                panel.update_view(self.now)
+            except Exception as e:      # ошибка в одном окне не должна ронять всю программу
+                panel.add_log(f"Ошибка обновления: {e}")
 
             auto = tr.state != MANUAL
             texts = [panel.name, "AUTO" if auto else "MANUAL", STATE_TEXT[tr.state],
-                     f"{tr.res.read_setpoint():.2f}", f"{tr.vacuum:.1e}",
+                     panel.u_text, f"{tr.vacuum:.1e}",
                      f"{tr.start:g} → {tr.stop:g}"]
             for col, text in enumerate(texts):
                 self.table.item(row, col).setText(text)

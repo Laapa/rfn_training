@@ -5,7 +5,7 @@
     Графики (U и вакуум)
     Данные | Вакуум + Ручное управление | лампочки
     Автоматическое управление | тумблер AUTO/MANUAL
-    часы, I насоса / U, Новая сессия, Сброс ГЕН/ББ, Вкл/Выкл МОД
+    часы, Новая сессия, Сброс, Вкл/Выкл МОД
 """
 import math
 import os
@@ -58,6 +58,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.tr.log = self.add_log
         self.cfg = config
         self.now = 0
+        self.u_text = "—"                  # последняя прочитанная уставка U (для «Обзора»)
         self.t, self.u_hist, self.u_set_hist, self.vac_hist = [], [], [], []
         self.file = DataFile(os.path.join(config["data_dir"], name))
         self.vac_u = VacUWindow(name)
@@ -282,7 +283,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         foot.addWidget(self.clock)
         foot.addWidget(new_session)
         foot.addStretch(1)
-        for text, command in (("Сброс ГЕН", res.reset_gen), ("Сброс ББ", res.reset_bb),
+        for text, command in (("Сброс", res.reset_all),          # RstAll - сброс всех блокировок
                               ("Вкл МОД", res.mod_on), ("Выкл МОД", res.mod_off)):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(lambda _, t=text, c=command: self.command(t, c))
@@ -375,12 +376,14 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.add_log(f"Sequence = {text}")
 
     def on_manual_u(self, value):
-        if self.tr.state != MANUAL:
+        if self.tr.state != MANUAL or value > self.tr.s.u_limit:
             return False
         self.tr.res.set_voltage(value)
         self.add_log(f"Вручную: U = {value:.2f} кВ")
 
     def on_manual_i(self, value):
+        if value > self.cfg["i_max_a"]:
+            return False
         self.tr.res.set_current(value)          # ток фидера - и в ручном, и в AUTO
         self.add_log(f"I фидера = {value:.2f} А")
 
@@ -398,8 +401,11 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.status.setText(self.file_msg)
 
     def command(self, text, func):
-        func()
-        self.add_log(f"Команда: {text}")
+        try:
+            func()
+            self.add_log(f"Команда: {text}")
+        except Exception as e:
+            self.add_log(f"Команда {text} не прошла: {e}")
 
     # ------------------------------------------------------------------ раз в тик
 
@@ -407,8 +413,18 @@ class ResonatorPanel(QtWidgets.QWidget):
         """Вызывается главным окном после каждого tick()."""
         self.now = now
         tr, s, res = self.tr, self.tr.s, self.tr.res
-        m = res.read_measurements()
-        u_set = res.read_setpoint()
+        try:
+            m = res.read_measurements()
+            u_set = res.read_setpoint()
+        except Exception as e:                     # нет связи: гасим лампочки, ничего не пишем
+            for lamp in (self.lamp_ready, self.lamp_agc_u, self.lamp_agc_i):
+                lamp.set("gray")
+            for box in list(self.data.values()) + list(self.foot.values()):
+                show(box, "—")
+            self.add_log(f"Нет связи с устройством: {e}")
+            self.u_text = "нет связи"
+            return
+        self.u_text = f"{u_set:.2f}"
         vac = tr.vacuum
         auto = tr.state != MANUAL
         u_no = u_from_power(m["p_fwd"], m["p_ref"], self.cfg["r_sh"])
@@ -428,7 +444,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         show(d["pump"], f"{m['pump_a']:.1e}", vac_color(vac, s))
         show(d["p_fwd"], f"{m['p_fwd']:.2f}")
         show(d["p_ref"], f"{m['p_ref']:.2f}", "red" if m["p_ref"] > self.cfg["u_otr_max"] else "")
-        show(d["phase"], f"{m['phase']:.2f}")
+        show(d["phase"], "—" if m["phase"] is None else f"{m['phase']:.2f}")
         show(d["u_no"], f"{u_no:.1f}")
         show(self.foot["pump"], f"{m['pump_a']:.1e}", vac_color(vac, s))
         show(self.foot["u"], f"{m['u']:.1f}")
@@ -451,8 +467,12 @@ class ResonatorPanel(QtWidgets.QWidget):
         for b in (self.btn_start, self.btn_stop, self.btn_rev):
             b.setEnabled(auto)
         self.u_field.setEnabled(not auto)          # в AUTO напряжение ведёт алгоритм
-        if auto:
+        current = res.read_current()
+        # поля уставок показывают то, что реально стоит в устройстве (пока в них не печатают)
+        if not self.u_field.edit.hasFocus():
             self.u_field.set_value(u_set)
+        if not self.i_field.edit.hasFocus():
+            self.i_field.set_value(current)
         going_up = auto and tr.direction > 0
         going_down = auto and tr.direction < 0
         for arrow, on in ((self.arrow_up, going_up), (self.arrow_down, going_down)):
@@ -467,7 +487,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.fit_controls()
 
         # --- запись в файл
-        self.file.write(m, vac, u_set, res.read_current(), "AUTO" if auto else "MANUAL")
+        self.file.write(m, vac, u_set, current, "AUTO" if auto else "MANUAL")
 
         # --- графики (ось X - реальное время)
         n = self.cfg["history_s"]
