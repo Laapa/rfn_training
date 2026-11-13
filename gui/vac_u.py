@@ -18,6 +18,8 @@ class VacAxis(pg.AxisItem):
         return [(1.0, levels[0]), (0.3, levels[1]), (0.1, levels[2])]
 
     def tickStrings(self, values, scale, spacing):
+        if not self.logMode:                      # обычная шкала - обычные подписи
+            return super().tickStrings(values, scale, spacing)
         return [f"{10 ** v:.0e}" for v in values]
 
 

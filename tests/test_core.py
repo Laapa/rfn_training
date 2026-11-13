@@ -155,6 +155,18 @@ def test_zone_reverses():
     assert 20 in seen and 22 in seen and tr.state != MANUAL
 
 
+def test_not_ready_holds():
+    res, tr = make(20)
+    res.ready = False
+    res.read_ready = lambda: res.ready
+    tr.enable(0)
+    run(tr, 0, 50)
+    assert res.u == 20 and tr.not_ready          # ВЧ выключено - уставку не трогаем
+    res.ready = True
+    run(tr, 50, 80)
+    assert res.u > 20 and not tr.not_ready       # включили - пошли дальше
+
+
 def test_link_error_goes_manual():
     res, tr = make(21)
     tr.enable(0)

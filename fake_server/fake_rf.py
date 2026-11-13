@@ -33,7 +33,7 @@ from tango.server import Device, attribute, command, run          # noqa: E402
 
 from trainer.sim import SimResonator                              # noqa: E402
 
-TRIP_TORR = 3e-8      # вакуум хуже этого - срабатывает блокировка
+TRIP_TORR = 1e-7      # вакуум хуже этого - срабатывает блокировка
 SLEW_KV_S = 2.0       # скорость выхода U на уставку, кВ/с
 PLANTS = {}           # prefix -> Plant (один «резонатор» стенда)
 
@@ -114,7 +114,7 @@ class Cav(Device):
     def Spike(self):
         """Пробой вручную: вакуум резко хуже."""
         p = plant(self)
-        p.sim.vacuum += 5e-8          # хуже TRIP_TORR - сработает блокировка
+        p.sim.vacuum += 1.5e-7          # хуже TRIP_TORR - сработает блокировка
 
 
 class Sspa(Device):

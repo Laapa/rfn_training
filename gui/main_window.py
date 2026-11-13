@@ -7,6 +7,7 @@ from trainer import config as cfg
 from trainer.core import Trainer, Settings, MANUAL
 from gui import style
 from gui.panel import ResonatorPanel, STATE_TEXT, vac_color
+from gui.viewer import FileViewer
 
 def load_settings(saved, u_limit):
     """Настройки резонатора, сохранённые в прошлый раз. Если там ерунда - по умолчанию."""
@@ -40,7 +41,13 @@ class MainWindow(QtWidgets.QMainWindow):
         central = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(central)
         lay.addWidget(self.table)
-        lay.addWidget(dark, alignment=Qt.AlignRight)
+        view_btn = QtWidgets.QPushButton("Просмотр записей…")
+        view_btn.clicked.connect(self.on_view)
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.addWidget(view_btn)
+        bottom.addStretch()
+        bottom.addWidget(dark)
+        lay.addLayout(bottom)
         self.setCentralWidget(central)
 
         self.panels = []
@@ -60,6 +67,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(config["tick_ms"])
+
+    def on_view(self):
+        self.viewer = FileViewer(self.config["data_dir"])
+        self.viewer.show()
+        self.viewer.choose()
 
     def on_theme(self, dark):
         style.apply_theme(QtWidgets.QApplication.instance(), dark)

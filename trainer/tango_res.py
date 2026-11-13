@@ -45,6 +45,10 @@ class TangoResonator:
         v = self._call(self.cav.read_attribute, "Vac").value
         return v / self.vac_coeff if self.vac_is_current else v
 
+    def read_ready(self):
+        """«Готовность» модулятора (mod/ModSt)."""
+        return self._call(self.mod.read_attribute, "ModSt").value
+
     def read_setpoint(self):
         return self._call(self.mod.read_attribute, "UcavSetpoint").value
 

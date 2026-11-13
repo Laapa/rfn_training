@@ -56,6 +56,7 @@ class Trainer:
         self.finished = False   # дошли до Stop (повод для фанфар)
         self.vacuum = 0.0       # последнее прочитанное значение (для экрана)
         self.paused = False     # кнопка Stop/Start: шаги вперёд на паузе, защита работает
+        self.not_ready = False  # нет «Готовности» (ВЧ выключено/блокировка) - автомат стоит
 
     # Start и Stop не вводятся, а вычисляются из Low/High и направления
     @property
@@ -79,6 +80,7 @@ class Trainer:
             return False
         self.finished = False
         self.paused = False
+        self.not_ready = False
         self.state = WAIT_GOOD
         self.log(f"AUTO: {s.sequence}, Start {self.start} кВ, Stop {self.stop} кВ")
         return True
@@ -111,6 +113,18 @@ class Trainer:
             self.t_mark = now
             return
 
+        # Нет «Готовности» (ВЧ выключено, сработала блокировка) - ничего не трогаем и ждём.
+        # Иначе уставка уползла бы вверх, а после включения ВЧ напряжение прыгнуло бы на неё.
+        if not self.ready():
+            if not self.not_ready:
+                self.log("Нет готовности (ВЧ выключено) - автомат ждёт")
+                self.not_ready = True
+            return
+        if self.not_ready:
+            self.log("Готовность есть - автомат продолжает (снова ждём Good)")
+            self.not_ready = False
+            self.state = WAIT_GOOD
+
         # После отступа: стал Good -> идём дальше вперёд,
         # за Timeout так и не стал Good -> ещё 3 шага назад (вплоть до Start)
         if self.state == BACKOFF:
@@ -133,6 +147,11 @@ class Trainer:
             self.state = WAIT_GOOD
         elif now - self.t_mark >= s.response_delay and not self.paused:
             self._step_forward()
+
+    def ready(self):
+        """Готов ли модулятор (лампочка «Готовность»). Если резонатор этого не умеет - считаем, что готов."""
+        read_ready = getattr(self.res, "read_ready", None)
+        return read_ready() if read_ready else True
 
     def set_paused(self, paused):
         """Кнопки Stop / Start: остановить шаги вперёд, не выходя из AUTO.

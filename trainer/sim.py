@@ -9,6 +9,7 @@
     read_setpoint()      -> уставка U, кВ          set_voltage(kv)
     read_current()       -> уставка I фидера, А    set_current(a)
     read_measurements()  -> словарь измерений (см. ниже)
+    read_ready()         -> «Готовность» (ВЧ включено, блокировок нет)
     reset_all(), mod_on(), mod_off()               - кнопки (RstAll, ModOn, ModOff)
     connected            -> есть ли связь с устройством
 """
@@ -42,6 +43,9 @@ class SimResonator:
 
     def read_current(self):
         return self.current
+
+    def read_ready(self):
+        return self.modulator
 
     def read_vacuum(self):
         self.vacuum = self.base + (self.vacuum - self.base) * 0.9   # откачка

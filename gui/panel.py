@@ -20,6 +20,7 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from gui import style
 from gui.sound import fanfare
 from gui.vac_u import VacAxis, VacUWindow
+from gui.viewer import FileViewer
 from gui.widgets import Lamp, Toggle, ArrowField, PrecisionSlider, value_box, MONO
 from trainer import config as config_file
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
@@ -286,9 +287,12 @@ class ResonatorPanel(QtWidgets.QWidget):
             "2026-11-13 00:00:00 воскресенье") + 20)
         new_session = QtWidgets.QPushButton("Новая сессия")
         new_session.clicked.connect(self.on_new_session)
+        view_btn = QtWidgets.QPushButton("Открыть запись…")       # посмотреть сохранённые .dat
+        view_btn.clicked.connect(self.on_view)
         foot = QtWidgets.QHBoxLayout()
         foot.addWidget(self.clock)
         foot.addWidget(new_session)
+        foot.addWidget(view_btn)
         foot.addStretch(1)
         for text, command in (("Сброс", res.reset_all),          # RstAll - сброс всех блокировок
                               ("Вкл МОД", res.mod_on), ("Выкл МОД", res.mod_off)):
@@ -425,6 +429,12 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.file_msg = f"Начата запись в файл {self.short_name()}"
         self.status.setText(self.file_msg)
 
+    def on_view(self):
+        """Окно просмотра: сразу открываем текущую запись, другую можно выбрать кнопкой."""
+        self.viewer = FileViewer(os.path.dirname(self.file.name))
+        self.viewer.open_file(self.file.name)
+        self.viewer.show()
+
     def command(self, text, func):
         try:
             func()
@@ -480,7 +490,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.lamp_ready.set("green" if m["ready"] else "red")
         self.lamp_agc_u.set("green" if m["agc_u"] else "gray")
         self.lamp_agc_i.set("green" if m["agc_i"] else "gray")
-        self.lamp_auto.set("green" if auto and not tr.paused else "red")
+        self.lamp_auto.set("green" if auto and not (tr.paused or tr.not_ready) else "red")
 
         # --- автоматика и ручное: активная группа - красная рамка, как было
         if auto != self.shown_auto:               # перекрашиваем рамки только при смене режима
@@ -502,7 +512,9 @@ class ResonatorPanel(QtWidgets.QWidget):
         for arrow, on in ((self.arrow_up, going_up), (self.arrow_down, going_down)):
             arrow.setStyleSheet(f"font-size: 14pt; color: {style.C['green'] if on else style.C['gray']}")
         self.state_lbl.setText(f"{tr.start:g} → {tr.stop:g} кВ · "
-                               + ("Пауза · " if auto and tr.paused else "") + STATE_TEXT[tr.state])
+                               + ("Пауза · " if auto and tr.paused else "")
+                               + ("Нет готовности, ждём · " if auto and tr.not_ready else "")
+                               + STATE_TEXT[tr.state])
         if self.seq.currentText() != s.sequence:   # Reverse мог поменять UP <-> DOWN
             self.seq.blockSignals(True)
             self.seq.setCurrentText(s.sequence)
