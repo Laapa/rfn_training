@@ -24,6 +24,6 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
     window = MainWindow(make_resonators(), TICK_MS)
-    window.resize(1400, 850)
+    window.resize(950, 1000)   # половина монитора по ширине
     window.show()
     sys.exit(app.exec_())

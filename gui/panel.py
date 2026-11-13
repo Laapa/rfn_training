@@ -1,11 +1,12 @@
-"""Вкладка одного резонатора: тренировка, пороги вакуума, ручное управление, графики."""
+"""Вкладка одного резонатора: графики сверху, все поля ввода под ними
+(узкое окно, чтобы на мониторе помещалось два)."""
 import math
 import time
 
 import pyqtgraph as pg
 from PyQt5 import QtWidgets
 
-from trainer.core import UP, DOWN, ZONE, MANUAL
+from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
 
 HISTORY = 3600   # сколько последних точек держать на графиках
 
@@ -13,7 +14,7 @@ STATE_TEXT = {
     "MANUAL": "Ручной режим",
     "WAIT_GOOD": "Ждём Good",
     "DELAY": "Отсчёт Response Delay",
-    "BACKOFF": "Very Bad, ждём Timeout",
+    "BACKOFF": "Отступили, ждём Good / Timeout",
 }
 
 
@@ -28,6 +29,19 @@ def vac_color(vac, s):
     return "orange"
 
 
+def spin(value, maximum, suffix, handler):
+    """Поле с числом и стрелками. Применяется по Enter/стрелкам, а не на каждую цифру."""
+    box = QtWidgets.QDoubleSpinBox()
+    box.setRange(0, maximum)
+    box.setDecimals(2)
+    box.setSingleStep(0.1)
+    box.setSuffix(suffix)
+    box.setKeyboardTracking(False)
+    box.setValue(value)                  # сначала значение, потом обработчик
+    box.valueChanged.connect(handler)
+    return box
+
+
 class ResonatorPanel(QtWidgets.QWidget):
     def __init__(self, name, trainer):
         super().__init__()
@@ -36,79 +50,6 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.tr.log = self.add_log
         self.now = 0
         self.t, self.u, self.vac = [], [], []
-
-        # ---------- Тренировка ----------
-        self.auto = QtWidgets.QCheckBox()
-        self.auto.clicked.connect(self.on_auto)       # clicked - только от пользователя
-        self.mode = QtWidgets.QLabel("MANUAL")
-        self.mode.setStyleSheet("font-weight: bold")
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(self.auto)
-        row.addWidget(self.mode)
-        row.addStretch()
-
-        self.seq = QtWidgets.QComboBox()
-        self.seq.addItems([UP, DOWN, ZONE])
-        self.seq.setCurrentText(trainer.s.sequence)
-        self.seq.currentTextChanged.connect(self.on_sequence)
-
-        self.start_lbl = QtWidgets.QLabel()
-        self.stop_lbl = QtWidgets.QLabel()
-        self.state_lbl = QtWidgets.QLabel()
-
-        f = QtWidgets.QFormLayout()
-        f.addRow("AUTO / MANUAL", row)
-        f.addRow("Step KV", self.field("step"))
-        f.addRow("Low KV", self.field("low"))
-        f.addRow("High KV", self.field("high"))
-        f.addRow("Sequence", self.seq)
-        f.addRow("Start", self.start_lbl)
-        f.addRow("Stop", self.stop_lbl)
-        f.addRow("Response Delay, с", self.field("response_delay"))
-        f.addRow("Timeout, с", self.field("timeout"))
-        f.addRow("Состояние", self.state_lbl)
-        box_train = QtWidgets.QGroupBox("Тренировка")
-        box_train.setLayout(f)
-
-        # ---------- Вакуум ----------
-        self.vac_lbl = QtWidgets.QLabel()
-        self.vac_lbl.setStyleSheet("font-size: 18px")
-        f = QtWidgets.QFormLayout()
-        f.addRow("Сейчас, Торр", self.vac_lbl)
-        f.addRow("Good", self.field("good"))
-        f.addRow("Bad", self.field("bad"))
-        f.addRow("Very Bad", self.field("very_bad"))
-        box_vac = QtWidgets.QGroupBox("Вакуум")
-        box_vac.setLayout(f)
-
-        # ---------- Ручное управление ----------
-        self.u_lbl = QtWidgets.QLabel()
-        self.u_lbl.setStyleSheet("font-size: 18px")
-        self.u_set = QtWidgets.QDoubleSpinBox()
-        self.u_set.setRange(0, 100)
-        self.u_set.setDecimals(2)
-        self.u_set.setSingleStep(0.1)
-        self.u_set.setSuffix(" кВ")
-        self.u_set.setKeyboardTracking(False)   # применять по Enter/стрелкам, а не на каждую цифру
-        self.u_set.setValue(trainer.res.read_setpoint())
-        self.u_set.valueChanged.connect(self.on_manual)
-        f = QtWidgets.QFormLayout()
-        f.addRow("U уставка сейчас", self.u_lbl)
-        f.addRow("Задать U", self.u_set)
-        self.box_manual = QtWidgets.QGroupBox("Ручное управление")
-        self.box_manual.setLayout(f)
-
-        # ---------- Журнал ----------
-        self.log_view = QtWidgets.QPlainTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setMaximumBlockCount(1000)
-
-        left = QtWidgets.QVBoxLayout()
-        for w in (box_train, box_vac, self.box_manual, self.log_view):
-            left.addWidget(w)
-        left_w = QtWidgets.QWidget()
-        left_w.setLayout(left)
-        left_w.setFixedWidth(360)
 
         # ---------- Графики ----------
         self.plot_u = pg.PlotWidget(title="U уставка (кВ) от времени (с)")
@@ -128,19 +69,89 @@ class ResonatorPanel(QtWidgets.QWidget):
             p.showGrid(x=True, y=True)
         self.plot_vac.setXLink(self.plot_u)   # общая ось времени
 
-        right = QtWidgets.QVBoxLayout()
-        for p in (self.plot_u, self.plot_vac, self.plot_vu):
-            right.addWidget(p)
+        # ---------- Тренировка ----------
+        self.auto = QtWidgets.QCheckBox()
+        self.auto.clicked.connect(self.on_auto)       # clicked - только от пользователя
+        self.mode = QtWidgets.QLabel("MANUAL")
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.auto)
+        row.addWidget(self.mode)
+        row.addStretch()
 
-        main = QtWidgets.QHBoxLayout(self)
-        main.addWidget(left_w)
-        main.addLayout(right)
+        self.seq = QtWidgets.QComboBox()
+        self.seq.addItems([UP, DOWN, ZONE, SAW])
+        self.seq.setCurrentText(trainer.s.sequence)
+        self.seq.currentTextChanged.connect(self.on_sequence)
+
+        self.start_stop = QtWidgets.QLabel()
+        self.state_lbl = QtWidgets.QLabel()
+
+        f = QtWidgets.QFormLayout()
+        f.addRow("AUTO / MANUAL", row)
+        f.addRow("Sequence", self.seq)
+        f.addRow("Step KV", self.field("step"))
+        f.addRow("Low KV", self.field("low"))
+        f.addRow("High KV", self.field("high"))
+        f.addRow("Start → Stop", self.start_stop)
+        f.addRow("Response Delay, с", self.field("response_delay"))
+        f.addRow("Timeout, с", self.field("timeout"))
+        f.addRow("Состояние", self.state_lbl)
+        box_train = QtWidgets.QGroupBox("Тренировка")
+        box_train.setLayout(f)
+
+        # ---------- Вакуум ----------
+        self.vac_lbl = QtWidgets.QLabel()
+        f = QtWidgets.QFormLayout()
+        f.addRow("Сейчас, Торр", self.vac_lbl)
+        f.addRow("Good", self.field("good"))
+        f.addRow("Bad", self.field("bad"))
+        f.addRow("Very Bad", self.field("very_bad"))
+        box_vac = QtWidgets.QGroupBox("Вакуум")
+        box_vac.setLayout(f)
+
+        # ---------- Ток фидера (общий для ручного и AUTO) ----------
+        self.i_set = spin(trainer.res.read_current(), 50, " А", self.on_current)
+        f = QtWidgets.QFormLayout()
+        f.addRow("I фидера", self.i_set)
+        box_cur = QtWidgets.QGroupBox("Ток фидера")
+        box_cur.setLayout(f)
+
+        # ---------- Ручное управление напряжением ----------
+        self.u_lbl = QtWidgets.QLabel()
+        self.u_set = spin(trainer.res.read_setpoint(), 100, " кВ", self.on_manual)
+        f = QtWidgets.QFormLayout()
+        f.addRow("U сейчас", self.u_lbl)
+        f.addRow("Задать U", self.u_set)
+        self.box_manual = QtWidgets.QGroupBox("Ручное управление U")
+        self.box_manual.setLayout(f)
+
+        # ---------- Журнал ----------
+        self.log_view = QtWidgets.QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setMaximumBlockCount(1000)
+
+        # ---------- Раскладка: графики сверху, поля снизу ----------
+        middle = QtWidgets.QVBoxLayout()
+        for w in (box_vac, box_cur, self.box_manual):
+            middle.addWidget(w)
+        middle.addStretch()
+
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.addWidget(box_train)
+        bottom.addLayout(middle)
+        bottom.addWidget(self.log_view, stretch=1)
+
+        main = QtWidgets.QVBoxLayout(self)
+        for p in (self.plot_u, self.plot_vac, self.plot_vu):
+            main.addWidget(p, stretch=1)
+        main.addLayout(bottom)
 
     # ------------------------------------------------------------------
 
     def field(self, attr):
         """Поле ввода настройки. Значение применяется по Enter (как в README)."""
         edit = QtWidgets.QLineEdit(f"{getattr(self.tr.s, attr):g}")
+        edit.setFixedWidth(90)
 
         def apply():
             old = getattr(self.tr.s, attr)
@@ -179,6 +190,10 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.tr.res.set_voltage(value)
             self.add_log(f"Вручную: U = {value:.2f} кВ")
 
+    def on_current(self, value):
+        self.tr.res.set_current(value)
+        self.add_log(f"I фидера = {value:.2f} А")
+
     def update_view(self, now):
         """Вызывается главным окном после каждого tick()."""
         self.now = now
@@ -196,12 +211,11 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.mode.setText("AUTO" if auto else "MANUAL")
         self.mode.setStyleSheet("font-weight: bold; color: " + ("green" if auto else "gray"))
         self.box_manual.setEnabled(not auto)
-        self.start_lbl.setText(f"{tr.start:g} кВ")
-        self.stop_lbl.setText(f"{tr.stop:g} кВ")
+        self.start_stop.setText(f"{tr.start:g} → {tr.stop:g} кВ")
         self.state_lbl.setText(STATE_TEXT[tr.state])
         self.u_lbl.setText(f"{u:.2f} кВ")
         self.vac_lbl.setText(f"{tr.vacuum:.1e}")
-        self.vac_lbl.setStyleSheet(f"font-size: 18px; color: {vac_color(tr.vacuum, tr.s)}")
+        self.vac_lbl.setStyleSheet(f"font-weight: bold; color: {vac_color(tr.vacuum, tr.s)}")
         if auto:   # в AUTO поле ручной уставки просто следует за алгоритмом
             self.u_set.blockSignals(True)
             self.u_set.setValue(u)

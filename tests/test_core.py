@@ -1,6 +1,6 @@
 """Проверки алгоритма. Запуск:  python -m tests.test_core
 (переписывать не обязательно - это моя страховка, что алгоритм работает по README)"""
-from trainer.core import Trainer, Settings, UP, DOWN, ZONE, MANUAL, DELAY, WAIT_GOOD
+from trainer.core import Trainer, Settings, UP, DOWN, ZONE, SAW, MANUAL, DELAY, WAIT_GOOD, BACKOFF
 
 GOOD, GRAY, BAD, VERY_BAD = 1e-9, 3e-9, 6e-9, 2e-8
 
@@ -68,6 +68,42 @@ def test_very_bad_three_steps_back_then_timeout():
     assert res.u == 21.8            # Timeout ещё не прошёл
     tr.tick(10)
     assert res.u == 20.3
+
+
+def test_after_backoff_still_not_good_steps_back_again():
+    res, tr = make(21.5)
+    tr.enable(0)
+    res.vac = VERY_BAD
+    tr.tick(0)                      # 21.5 - 3*0.5 = 20.0
+    res.u = 21.8                    # (подвинем вручную, чтобы было куда отступать)
+    res.vac = GRAY                  # лучше Very Bad, но не Good
+    tr.tick(5)
+    assert res.u == 21.8 and tr.state == BACKOFF
+    tr.tick(10)                     # Timeout прошёл, а Good нет -> ещё 3 шага назад
+    assert res.u == 20.3
+
+
+def test_after_backoff_good_goes_forward():
+    res, tr = make(21.5)
+    tr.enable(0)
+    res.vac = VERY_BAD
+    tr.tick(0)
+    res.vac = GOOD
+    tr.tick(1)
+    assert tr.state == DELAY
+    run(tr, 2, 7)
+    assert res.u == 20.5            # после Response Delay снова шаг вперёд
+
+
+def test_saw_jumps_to_low():
+    res, tr = make(21, sequence=SAW)
+    tr.enable(0)
+    seen = []
+    for t in range(200):
+        tr.tick(t)
+        seen.append(res.u)
+    after_high = [b for a, b in zip(seen, seen[1:]) if a == 22 and b != 22]
+    assert after_high and after_high[0] == 20 and tr.state != MANUAL   # с High - сразу в Low
 
 
 def test_very_bad_not_below_start():

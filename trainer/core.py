@@ -9,12 +9,13 @@ tick(now) нужно вызывать примерно раз в секунду 
 from dataclasses import dataclass
 
 UP, DOWN, ZONE = "Processing UP", "Processing DOWN", "ZONE"
+SAW = "SAW (пила)"   # плавно Low -> High, резко в Low, снова вверх
 
 # Состояния автомата
 MANUAL = "MANUAL"        # тренировка выключена
 WAIT_GOOD = "WAIT_GOOD"  # ждём, пока вакуум станет Good
 DELAY = "DELAY"          # вакуум Good, отсчитываем Response Delay
-BACKOFF = "BACKOFF"      # был Very Bad: отступили назад, ждём Timeout
+BACKOFF = "BACKOFF"      # был Very Bad: отступили назад, ждём Good или Timeout
 
 
 @dataclass
@@ -69,7 +70,7 @@ class Trainer:
             return False
         u = self.res.read_setpoint()
         self.sync_direction(u)
-        if (u - self.stop) * self.direction >= 0:
+        if s.sequence in (UP, DOWN) and (u - self.stop) * self.direction >= 0:
             self.log(f"Уставка {u:.2f} кВ уже на Stop или за ним, тренировка не запущена")
             return False
         self.finished = False
@@ -89,16 +90,23 @@ class Trainer:
             return
         s = self.s
 
-        # п.3-4: Very Bad в любой момент -> шаги назад, повтор не чаще раза в Timeout
-        if vac >= s.very_bad:
-            if self.state != BACKOFF or now - self.t_mark >= s.timeout:
-                self._step_back()
-                self.state = BACKOFF
-                self.t_mark = now
+        # Very Bad в любой момент -> сразу 3 шага назад
+        if vac >= s.very_bad and self.state != BACKOFF:
+            self._step_back()
+            self.state = BACKOFF
+            self.t_mark = now
             return
 
-        if self.state == BACKOFF:   # п.4: вакуум улучшился -> обратно к п.1
-            self.state = WAIT_GOOD
+        # После отступа: стал Good -> идём дальше вперёд,
+        # за Timeout так и не стал Good -> ещё 3 шага назад (вплоть до Start)
+        if self.state == BACKOFF:
+            if vac <= s.good:
+                self.state = DELAY
+                self.t_mark = now
+            elif now - self.t_mark >= s.timeout:
+                self._step_back()
+                self.t_mark = now
+            return
 
         if self.state == WAIT_GOOD:  # п.1: ждём именно Good
             if vac <= s.good:
@@ -115,7 +123,7 @@ class Trainer:
     # ---------------------------------------------------------------------
 
     def sync_direction(self, u):
-        if self.s.sequence == UP:
+        if self.s.sequence in (UP, SAW):
             self.direction = +1
         elif self.s.sequence == DOWN:
             self.direction = -1
@@ -125,22 +133,29 @@ class Trainer:
     def _step_forward(self):
         u = self.res.read_setpoint()
         self.sync_direction(u)      # Sequence могли поменять на ходу
-        if (u - self.stop) * self.direction < 0:   # до Stop ещё не дошли
-            new = u + self.direction * self.s.step
-            if (new - self.stop) * self.direction > 0:
-                new = self.stop     # не перескакиваем Stop
-            self.res.set_voltage(new)
-            self.log(f"Шаг -> {new:.2f} кВ")
-            u = new
         self.state = WAIT_GOOD
-        if (u - self.stop) * self.direction >= 0:  # дошли до Stop (или Low/High поменяли на ходу)
-            if self.s.sequence == ZONE:
-                self.direction = -self.direction   # п.6
-                self.log(f"ZONE: разворот, теперь Stop {self.stop} кВ")
-            else:
-                self.finished = True               # п.5
-                self.log("Дошли до Stop")
-                self.disable()
+        if (u - self.stop) * self.direction < 0:   # до Stop ещё не дошли - шаг
+            u = u + self.direction * self.s.step
+            if (u - self.stop) * self.direction > 0:
+                u = self.stop       # не перескакиваем Stop
+            self.res.set_voltage(u)
+            self.log(f"Шаг -> {u:.2f} кВ")
+            if self.s.sequence == SAW:
+                return              # на High стоим одну выдержку, сброс - следующим шагом
+        if (u - self.stop) * self.direction >= 0:  # на Stop (или Low/High поменяли на ходу)
+            self._at_stop()
+
+    def _at_stop(self):
+        if self.s.sequence == ZONE:
+            self.direction = -self.direction       # п.6
+            self.log(f"ZONE: разворот, теперь Stop {self.stop} кВ")
+        elif self.s.sequence == SAW:
+            self.res.set_voltage(self.start)       # резко вниз, дальше снова вверх
+            self.log(f"Пила: сброс -> {self.start:g} кВ")
+        else:
+            self.finished = True                   # п.5
+            self.log("Дошли до Stop")
+            self.disable()
 
     def _step_back(self):
         u = self.res.read_setpoint()
