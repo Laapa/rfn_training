@@ -304,7 +304,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         main.addWidget(self.splitter, stretch=1)
         main.addLayout(foot)
         main.addWidget(self.status)
-        self.file_msg = f"Начата запись в файл {self.file.name}"
+        self.file_msg = f"Начата запись в файл {self.short_name()}"
         self.status.setText(self.file_msg)
 
     def fit_controls(self):
@@ -325,6 +325,11 @@ class ResonatorPanel(QtWidgets.QWidget):
     def add_log(self, msg):
         self.status.setText(f"{self.file_msg}    |    {time.strftime('%H:%M:%S')}  {msg}")
         self.file.log(msg)                         # вся история - в журнал рядом с .dat
+
+    def short_name(self):
+        """Имя файла данных для строки статуса: папка резонатора / файл (без длинного пути)."""
+        folder, name = os.path.split(self.file.name)
+        return os.path.join(os.path.basename(folder), name)
 
     def save_settings(self):
         """Настройки окна (Low, High, Step, пороги...) - в training_config.json, чтобы пережить перезапуск."""
@@ -417,7 +422,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.file.new_session()
         self.t, self.u_hist, self.u_set_hist, self.vac_hist = [], [], [], []
         self.vac_u.clear()
-        self.file_msg = f"Начата запись в файл {self.file.name}"
+        self.file_msg = f"Начата запись в файл {self.short_name()}"
         self.status.setText(self.file_msg)
 
     def command(self, text, func):
