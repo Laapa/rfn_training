@@ -3,6 +3,7 @@
 Закрытое окно не останавливает тренировку - она идёт, пока работает программа."""
 from PyQt5 import QtWidgets, QtCore, QtGui
 
+from trainer import config as cfg
 from trainer.core import Trainer, Settings, MANUAL
 from gui import style
 from gui.panel import ResonatorPanel, STATE_TEXT, vac_color
@@ -17,6 +18,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("Тренировка резонаторов - обзор")
         self.now = 0   # время алгоритма, с (1 тик = 1 с)
+        self.config = config
 
         self.table = QtWidgets.QTableWidget(len(resonators), len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
@@ -25,7 +27,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(36)
         self.table.setShowGrid(False)
-        self.setCentralWidget(self.table)
+        dark = QtWidgets.QCheckBox("Тёмная тема")
+        dark.setChecked(config["dark_theme"])
+        dark.toggled.connect(self.on_theme)
+        central = QtWidgets.QWidget()
+        lay = QtWidgets.QVBoxLayout(central)
+        lay.addWidget(self.table)
+        lay.addWidget(dark, alignment=Qt.AlignRight)
+        self.setCentralWidget(central)
 
         self.panels = []
         for row, (name, res) in enumerate(resonators):
@@ -42,6 +51,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(config["tick_ms"])
+
+    def on_theme(self, dark):
+        style.apply_theme(QtWidgets.QApplication.instance(), dark)
+        self.config["dark_theme"] = dark
+        cfg.save(self.config)                 # запомнить выбор
 
     def on_check(self, item):
         if item.column() != 0:
@@ -76,8 +90,9 @@ class MainWindow(QtWidgets.QMainWindow):
             for col, text in enumerate(texts):
                 self.table.item(row, col).setText(text)
             self.table.item(row, 0).setCheckState(Qt.Checked if panel.isVisible() else Qt.Unchecked)
-            self.table.item(row, 1).setForeground(QtGui.QColor(style.GREEN if auto else style.MUTED))
-            self.table.item(row, 4).setForeground(QtGui.QColor(vac_color(tr.vacuum, tr.s)))
+            self.table.item(row, 1).setForeground(QtGui.QColor("green" if auto else "gray"))
+            color = vac_color(tr.vacuum, tr.s)
+            self.table.item(row, 4).setForeground(QtGui.QColor(color) if color else self.palette().text())
         self.table.blockSignals(False)
 
     def closeEvent(self, event):

@@ -1,84 +1,113 @@
-"""Маленькие элементы интерфейса: карточка, плитка с числом, лампочка, тумблер."""
+"""Элементы интерфейса из старой программы: лампочка, тумблер, поле со стрелками, ползунок."""
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from gui import style
+from gui.style import icon
+
+MONO = QtGui.QFont("Consolas", 11)
 
 
-class Card(QtWidgets.QFrame):
-    """Карточка с заголовком. Содержимое добавлять в card.body (вертикальная раскладка)."""
-    def __init__(self, title="", extra=None):
+class Lamp(QtWidgets.QLabel):
+    """Лампочка - те же картинки, что в старой программе."""
+    def __init__(self, size=24):
         super().__init__()
-        self.setObjectName("card")
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(12, 10, 12, 12)
-        if title or extra:
-            head = QtWidgets.QHBoxLayout()
-            label = QtWidgets.QLabel(title)
-            label.setObjectName("cardTitle")
-            head.addWidget(label)
-            head.addStretch()
-            if extra:
-                head.addWidget(extra)
-            lay.addLayout(head)
-        self.body = QtWidgets.QVBoxLayout()
-        lay.addLayout(self.body)
+        self.size = size
+        self.set("gray")
 
-
-class Tile(Card):
-    """Плитка: подпись сверху, крупное число, единицы."""
-    def __init__(self, title, unit):
-        super().__init__(title)
-        self.layout().setContentsMargins(10, 6, 10, 6)   # плитки компактнее карточек
-        row = QtWidgets.QHBoxLayout()
-        self.value = QtWidgets.QLabel("—")
-        self.value.setObjectName("tileValue")
-        self.unit = QtWidgets.QLabel(unit)
-        self.unit.setObjectName("muted")
-        row.addWidget(self.value)
-        row.addWidget(self.unit, alignment=QtCore.Qt.AlignBottom)
-        row.addStretch()
-        self.body.addLayout(row)
-
-    def set(self, text, color=style.TEXT):
-        self.value.setText(text)
-        self.value.setStyleSheet(f"color: {color}")
-
-
-class Lamp(QtWidgets.QWidget):
-    """Лампочка с подписью. set(цвет) - зажечь, set(style.GRAY) - погасить."""
-    def __init__(self, text):
-        super().__init__()
-        lay = QtWidgets.QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        self.dot = QtWidgets.QLabel()
-        self.dot.setFixedSize(14, 14)
-        label = QtWidgets.QLabel(text)
-        label.setObjectName("muted")
-        lay.addWidget(self.dot)
-        lay.addWidget(label)
-        self.set(style.GRAY)
-
-    def set(self, color):
-        self.dot.setStyleSheet(f"background: {color}; border-radius: 7px;"
-                               f"border: 2px solid {QtGui.QColor(color).lighter(130).name()};")
+    def set(self, color):            # "green", "red", "blue", "gray"
+        pix = QtGui.QPixmap(icon(f"{color}-led-on.png"))
+        self.setPixmap(pix.scaled(self.size, self.size, QtCore.Qt.KeepAspectRatio,
+                                  QtCore.Qt.SmoothTransformation))
 
 
 class Toggle(QtWidgets.QCheckBox):
-    """Тумблер вместо галки (как большой переключатель AUTO/MANUAL в старой программе)."""
+    """Большой тумблер AUTO / MANUAL - та же картинка и та же логика, что в старой программе."""
     def __init__(self):
         super().__init__()
-        self.setFixedSize(56, 30)
+        self.setStyleSheet(f"""
+            QCheckBox::indicator {{ width: 80px; height: 80px; }}
+            QCheckBox::indicator:unchecked {{ image: url({icon('switch_on_min.png')}); }}
+            QCheckBox::indicator:checked {{ image: url({icon('switch_off_min.png')}); }}
+        """.replace("\\", "/"))
         self.setCursor(QtCore.Qt.PointingHandCursor)
 
-    def hitButton(self, pos):          # нажимать можно в любом месте тумблера
-        return self.contentsRect().contains(pos)
 
-    def paintEvent(self, event):
-        p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.Antialiasing)
-        p.setPen(QtCore.Qt.NoPen)
-        p.setBrush(QtGui.QColor(style.GREEN if self.isChecked() else style.GRAY))
-        p.drawRoundedRect(0, 0, 56, 30, 15, 15)
-        p.setBrush(QtGui.QColor("white"))
-        x = 29 if self.isChecked() else 3
-        p.drawEllipse(x, 3, 24, 24)
+def value_box(width=90):
+    """Поле только для чтения - так в старой программе показывались измерения."""
+    box = QtWidgets.QLineEdit()
+    box.setReadOnly(True)
+    box.setFixedWidth(width)
+    box.setFont(MONO)
+    return box
+
+
+class ArrowField(QtWidgets.QWidget):
+    """Поле ввода со стрелками ⇧ ⇩ справа, как в старой программе.
+    Enter или стрелка -> on_change(новое значение). Если on_change вернул False - значение откатывается.
+    Шаг стрелок берётся из step() (обычно - из ползунка Точно/Грубо)."""
+    def __init__(self, value, unit, on_change, step, fmt="{:.2f}", width=80):
+        super().__init__()
+        self.on_change, self.step, self.fmt = on_change, step, fmt
+        self.edit = QtWidgets.QLineEdit()
+        self.edit.setFixedWidth(width)
+        self.edit.setFont(MONO)
+        self.edit.returnPressed.connect(self.from_text)
+        up = QtWidgets.QPushButton("⇧")
+        down = QtWidgets.QPushButton("⇩")
+        for b in (up, down):
+            b.setFixedSize(26, 15)
+            b.setStyleSheet("padding: 0px; font-size: 9pt;")
+        up.clicked.connect(lambda: self.apply(self.value + self.step()))
+        down.clicked.connect(lambda: self.apply(self.value - self.step()))
+        arrows = QtWidgets.QVBoxLayout()
+        arrows.setSpacing(0)
+        arrows.addWidget(up)
+        arrows.addWidget(down)
+        lay = QtWidgets.QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        lay.addWidget(self.edit)
+        lay.addLayout(arrows)
+        lay.addWidget(QtWidgets.QLabel(unit))
+        self.set_value(value)
+
+    def set_value(self, value):      # показать значение, ничего не применяя
+        self.value = value
+        self.edit.setText(self.fmt.format(value))
+
+    def from_text(self):
+        try:
+            self.apply(float(self.edit.text().replace(",", ".")))
+        except ValueError:
+            self.set_value(self.value)
+
+    def apply(self, value):
+        value = round(max(value, 0.0), 6)
+        if self.on_change(value) is False:
+            self.set_value(self.value)   # не приняли - вернуть старое
+        else:
+            self.set_value(value)
+
+
+class PrecisionSlider(QtWidgets.QWidget):
+    """Ползунок «Точно / Грубо», как в старой программе: 3 положения шага стрелок.
+    labels - подписи слева (сверху вниз), steps - шаги для каждого положения."""
+    def __init__(self, labels, steps):
+        super().__init__()
+        self.steps = steps
+        self.slider = QtWidgets.QSlider(QtCore.Qt.Vertical)
+        self.slider.setRange(0, 2)
+        self.slider.setValue(1)
+        self.slider.setInvertedAppearance(True)       # верх = точно
+        self.slider.setFixedHeight(70)
+        grid = QtWidgets.QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setVerticalSpacing(0)
+        for r, text in enumerate(labels):
+            grid.addWidget(QtWidgets.QLabel(text), r, 0)
+        grid.addWidget(self.slider, 0, 1, 3, 1)
+        grid.addWidget(QtWidgets.QLabel("Точно"), 0, 2)
+        grid.addWidget(QtWidgets.QLabel("Грубо"), 2, 2)
+
+    def step(self, k=0):
+        """Шаг для поля k (у ручного управления два поля: U и I со своими шагами)."""
+        return self.steps[k][self.slider.value()]

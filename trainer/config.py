@@ -12,6 +12,7 @@ DEFAULTS = {
     "u_otr_max": 6.0,       # отражённая мощность выше этого - красным, кВт
     "history_s": 7200,      # сколько секунд держать на графиках (x_time)
     "data_dir": "data",     # куда писать .dat
+    "dark_theme": False,    # тёмная тема (галка в окне «Обзор»)
     "resonators": [         # type: "sim" сейчас, "tango" - когда будут атрибуты
         {"name": "Резонатор 1", "type": "sim"},
         {"name": "Резонатор 2", "type": "sim"},
@@ -29,3 +30,8 @@ def load():
     with open(PATH, encoding="utf-8") as f:
         config = json.load(f)
     return {**DEFAULTS, **config}, f"Настройки прочитаны из {PATH}"
+
+
+def save(config):
+    with open(PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)

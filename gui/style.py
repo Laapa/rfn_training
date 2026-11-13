@@ -1,63 +1,30 @@
-"""Оформление: тёмная тема. Все цвета - здесь, чтобы менять в одном месте."""
-import pyqtgraph as pg
+"""Оформление в духе старой программы: светлая тема по умолчанию,
+тёмная - по выбору (галка в окне «Обзор»). Группы - в цветных рамках, как было."""
+import os
 
-BG = "#0d1117"        # фон окна
-CARD = "#161b22"      # фон карточек и графиков
-BORDER = "#30363d"
-TEXT = "#e6edf3"
-MUTED = "#8b949e"     # подписи
-ACCENT = "#2f81f7"    # синий акцент
-GREEN = "#3fb950"
-ORANGE = "#d29922"
-RED = "#f85149"
-MAGENTA = "#db61a2"
-GRAY = "#484f58"      # выключенная лампочка
-YELLOW = "#e3b341"
-MONO = "Consolas"     # шрифт для чисел
+ICONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui", "icon")
 
-QSS = f"""
-QWidget {{ background: {BG}; color: {TEXT}; font-family: "Segoe UI"; font-size: 10pt; }}
-QFrame#card {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px; }}
-QFrame#card QWidget {{ background: transparent; }}
-QLabel#cardTitle {{ color: {MUTED}; font-size: 9pt; font-weight: 600;
-                    text-transform: uppercase; letter-spacing: 1px; }}
-QLabel#muted {{ color: {MUTED}; }}
-QLabel#tileValue {{ font-family: {MONO}; font-size: 15pt; font-weight: 600; }}
-QLabel#bigTitle {{ font-size: 15pt; font-weight: 700; }}
-QLabel#clock {{ font-family: {MONO}; font-size: 12pt; color: {MUTED}; }}
-
-QLineEdit, QDoubleSpinBox, QComboBox {{
-    background: {BG}; border: 1px solid {BORDER}; border-radius: 6px;
-    padding: 4px 6px; font-family: {MONO}; font-size: 11pt; min-height: 22px; }}
-QLineEdit:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border: 1px solid {ACCENT}; }}
-QLineEdit:disabled, QDoubleSpinBox:disabled {{ color: {GRAY}; }}
-QComboBox QAbstractItemView {{ background: {CARD}; selection-background-color: {ACCENT}; }}
-QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{ width: 22px; }}
-
-QPushButton {{ background: #21262d; border: 1px solid {BORDER}; border-radius: 6px;
-               padding: 6px 12px; font-weight: 600; }}
-QPushButton:hover {{ border-color: {ACCENT}; }}
-QPushButton:pressed {{ background: {ACCENT}; }}
-QPushButton:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
-QPushButton:disabled {{ color: {GRAY}; }}
-QPushButton#segment {{ padding: 4px 8px; border-radius: 0px; }}
-QPushButton#danger:hover {{ border-color: {RED}; color: {RED}; }}
-
-QTableWidget {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 10px;
-                gridline-color: {BORDER}; font-family: {MONO}; font-size: 11pt; }}
-QHeaderView::section {{ background: {CARD}; color: {MUTED}; border: none;
-                        border-bottom: 1px solid {BORDER}; padding: 6px; font-weight: 600; }}
-QTableWidget::item:selected {{ background: #1f2a3a; }}
-QTableWidget::indicator {{ width: 16px; height: 16px; border: 1px solid {MUTED}; border-radius: 4px; }}
-QTableWidget::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
-QSplitter::handle {{ background: {BG}; height: 6px; }}
-QScrollArea {{ border: none; }}
-QStatusBar {{ color: {MUTED}; }}
+DARK = """
+QWidget { background: #202124; color: #e8eaed; }
+QLineEdit, QComboBox, QTableWidget { background: #2b2c2f; color: #e8eaed; border: 1px solid #5f6368; }
+QPushButton { background: #3c4043; color: #e8eaed; border: 1px solid #5f6368; padding: 4px 10px; }
+QPushButton:disabled, QLineEdit:disabled { color: #6f7378; }
+QHeaderView::section { background: #2b2c2f; color: #e8eaed; }
 """
 
 
-def setup(app):
-    """Включить тему для всего приложения."""
+def group(box, color, width=3):
+    """Рамка группы, как в старой программе (зелёная - вакуум, голубая - данные и т.д.)."""
+    box.setStyleSheet(
+        f"QGroupBox {{ border: {width}px solid {color}; border-radius: 10px;"
+        " margin-top: 2ex; padding-top: 8px; font-size: 11pt; font-weight: bold; }"
+        "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 10px; }")
+
+
+def apply_theme(app, dark):
     app.setStyle("Fusion")
-    app.setStyleSheet(QSS)
-    pg.setConfigOptions(background=CARD, foreground=MUTED, antialias=True)
+    app.setStyleSheet(DARK if dark else "")
+
+
+def icon(name):
+    return os.path.join(ICONS, name)

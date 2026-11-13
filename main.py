@@ -28,8 +28,8 @@ if __name__ == "__main__":
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication(sys.argv)
-    style.setup(app)
     config, message = cfg.load()
+    style.apply_theme(app, config["dark_theme"])
     window = MainWindow(make_resonators(config), config, message)
     window.resize(900, 260)   # окна резонаторов встают в половины экрана сами
     window.show()
