@@ -12,10 +12,13 @@ import tango
 
 
 class TangoResonator:
-    def __init__(self, prefix="", vac_coeff=1500.0, vac_is_current=False, timeout_ms=1000, devices=None):
+    def __init__(self, prefix="", vac_coeff=1500.0, vac_is_current=False, timeout_ms=1000,
+                 devices=None, nodb=False):
         """devices - явные адреса {"mod": ..., "cav": ..., "sspa": ...} (для тестов);
-        обычно не нужен: адреса строятся из prefix."""
-        devices = devices or {d: f"{prefix}/{d}" for d in ("mod", "cav", "sspa")}
+        обычно не нужен: адреса строятся из prefix.
+        nodb - устройства без базы Tango (фейковый сервер), prefix вида tango://localhost:45450/rf2/1e2"""
+        tail = "#dbase=no" if nodb else ""
+        devices = devices or {d: f"{prefix}/{d}{tail}" for d in ("mod", "cav", "sspa")}
         self.vac_coeff = vac_coeff
         self.vac_is_current = vac_is_current    # True, если Vac отдаёт ток насоса (А), а не Торр
         self.mod = tango.DeviceProxy(devices["mod"])

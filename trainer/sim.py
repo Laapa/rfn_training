@@ -17,7 +17,8 @@ import random
 
 
 class SimResonator:
-    def __init__(self, base=1e-9, conditioned=25.0, seed=None, vac_coeff=1500.0, r_sh=3.19e6):
+    def __init__(self, base=1e-9, conditioned=25.0, seed=None, vac_coeff=1500.0, r_sh=3.19e6,
+                 spark_rate=0.02):
         self.setpoint = 0.0              # кВ
         self.current = 0.0               # уставка тока фидера, А
         self.base = base                 # чистый вакуум, Торр
@@ -28,6 +29,7 @@ class SimResonator:
         self.r_sh = r_sh
         self.modulator = True
         self.connected = True
+        self.spark_rate = spark_rate     # вероятность пробоя в секунду на каждый кВ выше «чистого»
 
     def set_voltage(self, kv):
         self.setpoint = kv
@@ -45,7 +47,7 @@ class SimResonator:
         self.vacuum = self.base + (self.vacuum - self.base) * 0.9   # откачка
         over = self.setpoint - self.conditioned
         if over > 0:
-            if self.rnd.random() < 0.02 * over:                     # пробой
+            if self.rnd.random() < self.spark_rate * over:          # пробой
                 self.vacuum += self.base * self.rnd.uniform(2, 20)
             self.conditioned += 0.002 * over                        # тренируется
         return self.vacuum

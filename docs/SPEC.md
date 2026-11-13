@@ -12,6 +12,10 @@
 | `trainer/tango_res.py` | резонатор через Tango: `<prefix>/mod`, `cav`, `sspa` (prefix из config, напр. `rf2/1e2`) | PyTango 9.5.1 (стенд — Tango 9.3.4, ПК — Python 3.12) |
 | `gui/` | окно «Обзор» (таблица, галка = показать окно резонатора) + отдельное окно на каждый резонатор в пол-экрана | PyQt5, pyqtgraph |
 
+| `trainer/config.py`, `trainer/datafile.py` | настройки (training_config.json), запись .dat и журнала .log | ничего |
+| `fake_server/fake_rf.py` | фейковый стенд: mod/cav/sspa с «физикой», без базы Tango | PyTango |
+| `training.spec`, `build_exe.bat` | сборка Training.exe (PyInstaller) | PyInstaller |
+
 ## Алгоритм (решения)
 - Шаг каждые Response Delay, только когда вакуум ≤ Good.
 - Между Good и Bad новый отсчёт не начинается — ждём Good.
@@ -40,7 +44,11 @@
 | DO line0,1,2,4 | Сброс ГЕН, Сброс ББ, Выкл МОД, Вкл МОД | импульс 1 с |
 | Modbus 10.0.0.96:502 unit 3, reg 1 | ток насоса | Торр = А / vac_coeff |
 
+## Стенд (ответы)
+- Устройства: `<prefix>/mod`, `cav`, `sspa`; prefix у резонаторов отличается цифрами (rf2/1e2 ...).
+- `cav/Vac` — в торрах. Фазометра нет, сброс один — `RstAll`.
+- Tango на стенде 9.3.4; на ПК Python 3.12 -> PyTango 9.5.1.
+
 ## Открытые вопросы
-- Описание атрибутов device-серверов (обещано).
 - Свой ли вакуум у каждого резонатора на стенде ИЯФ (в здании — свой, атрибут device-сервера).
 - Что из прошлого проекта rfn перенести.

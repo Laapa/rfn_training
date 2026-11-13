@@ -1,9 +1,13 @@
-"""Файл настроек training_config.json рядом с программой.
-Нет файла - создаём со значениями по умолчанию (как старая программа)."""
+"""Файл настроек training_config.json рядом с программой (рядом с exe, если собрано в exe).
+Нет файла - создаём со значениями по умолчанию (как старая программа).
+Другой файл можно указать при запуске:  python main.py fake_config.json"""
 import json
 import os
+import sys
 
-PATH = "training_config.json"
+# папка программы: рядом с exe (если собрано PyInstaller'ом) или текущая папка
+BASE = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.getcwd()
+PATH = os.path.join(BASE, "training_config.json")
 
 DEFAULTS = {
     "tick_ms": 1000,        # 1 тик алгоритма = 1 с. Для симулятора можно 200 (в 5 раз быстрее)
@@ -17,8 +21,10 @@ DEFAULTS = {
     "i_max_a": 10.0,        # предел уставки I фидера (IfidSetpoint 0..10 А)
     "tango_host": "",       # например "host:10000"; пусто - берётся из переменной TANGO_HOST
     "vac_is_current": False,  # True, если cav/Vac отдаёт ток насоса (А), а не Торр
-    # type: "sim" - симулятор, "tango" - настоящий резонатор.
+    # type: "sim" - встроенный симулятор, "tango" - резонатор через Tango.
     # prefix: начало имени устройств, prefix/mod, prefix/cav, prefix/sspa (у резонаторов отличается цифрами)
+    # nodb: true - устройство без базы Tango (фейковый сервер fake_server/fake_rf.py)
+    # settings: настройки окна (Low, High, пороги...) - программа сама сохраняет их сюда
     "resonators": [
         {"name": "Резонатор 1", "type": "sim", "prefix": "rf2/1e2"},
         {"name": "Резонатор 2", "type": "sim", "prefix": "rf3/1e3"},
@@ -27,17 +33,26 @@ DEFAULTS = {
 }
 
 
-def load():
-    """Возвращает (config, сообщение)."""
-    if not os.path.exists(PATH):
+def load(path=None):
+    """Возвращает (config, сообщение). path - другой файл настроек (необязательно)."""
+    global PATH
+    if path:
+        PATH = os.path.abspath(path)
+    if os.path.exists(PATH):
+        with open(PATH, encoding="utf-8") as f:
+            config = {**DEFAULTS, **json.load(f)}      # новые параметры подтянутся из DEFAULTS
+        message = f"Настройки прочитаны из {PATH}"
+    else:
         with open(PATH, "w", encoding="utf-8") as f:
             json.dump(DEFAULTS, f, indent=4, ensure_ascii=False)
-        return dict(DEFAULTS), f"Файл {PATH} не найден - создан с настройками по умолчанию"
-    with open(PATH, encoding="utf-8") as f:
-        config = json.load(f)
-    return {**DEFAULTS, **config}, f"Настройки прочитаны из {PATH}"
+        config = json.loads(json.dumps(DEFAULTS))      # копия, чтобы не портить DEFAULTS
+        message = f"Файл {PATH} не найден - создан с настройками по умолчанию"
+    config["data_dir"] = os.path.join(os.path.dirname(PATH), config["data_dir"])   # data - рядом с настройками
+    return config, message
 
 
 def save(config):
+    data = dict(config)
+    data["data_dir"] = os.path.relpath(config["data_dir"], os.path.dirname(PATH))   # хранить коротко
     with open(PATH, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=4, ensure_ascii=False)
+        json.dump(data, f, indent=4, ensure_ascii=False)

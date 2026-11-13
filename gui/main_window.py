@@ -8,6 +8,13 @@ from trainer.core import Trainer, Settings, MANUAL
 from gui import style
 from gui.panel import ResonatorPanel, STATE_TEXT, vac_color
 
+def load_settings(saved, u_limit):
+    """Настройки резонатора, сохранённые в прошлый раз. Если там ерунда - по умолчанию."""
+    known = {k: v for k, v in saved.items() if k in Settings.__dataclass_fields__ and k != "u_limit"}
+    settings = Settings(**known, u_limit=u_limit)
+    return Settings(u_limit=u_limit) if settings.check() else settings
+
+
 COLUMNS = ["Резонатор", "Режим", "Состояние", "U, кВ", "Вакуум, Торр", "Start → Stop"]
 Qt = QtCore.Qt
 
@@ -38,7 +45,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.panels = []
         for row, (name, res) in enumerate(resonators):
-            self.panels.append(ResonatorPanel(name, Trainer(res, Settings(u_limit=config["u_max_kv"])), config))
+            item = config["resonators"][row]
+            settings = load_settings(item.get("settings", {}), config["u_max_kv"])
+            self.panels.append(ResonatorPanel(name, Trainer(res, settings), config, item))
             for col in range(len(COLUMNS)):          # ячейки создаём один раз
                 self.table.setItem(row, col, QtWidgets.QTableWidgetItem())
             first = self.table.item(row, 0)
@@ -107,4 +116,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if answer != QtWidgets.QMessageBox.Yes:
                 event.ignore()
                 return
+        for p in self.panels:                 # Reverse мог поменять Sequence - сохраним всё
+            p.save_settings()
         QtWidgets.QApplication.quit()

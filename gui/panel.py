@@ -7,8 +7,10 @@
     Автоматическое управление | тумблер AUTO/MANUAL
     часы, Новая сессия, Сброс, Вкл/Выкл МОД
 """
+import dataclasses
 import math
 import os
+import re
 import time
 from datetime import datetime
 
@@ -16,8 +18,10 @@ import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from gui import style
+from gui.sound import fanfare
 from gui.vac_u import VacAxis, VacUWindow
 from gui.widgets import Lamp, Toggle, ArrowField, PrecisionSlider, value_box, MONO
+from trainer import config as config_file
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
 from trainer.datafile import DataFile
 from trainer.sim import u_from_power
@@ -50,17 +54,20 @@ def show(box, text, color=""):
 
 
 class ResonatorPanel(QtWidgets.QWidget):
-    def __init__(self, name, trainer, config):
+    def __init__(self, name, trainer, config, item=None):
+        """item - запись этого резонатора в training_config.json (туда сохраняются настройки окна)."""
         super().__init__()
         self.setWindowTitle(name)
         self.name = name
         self.tr = trainer
         self.tr.log = self.add_log
         self.cfg = config
+        self.item = item if item is not None else {}
         self.now = 0
         self.u_text = "—"                  # последняя прочитанная уставка U (для «Обзора»)
         self.t, self.u_hist, self.u_set_hist, self.vac_hist = [], [], [], []
-        self.file = DataFile(os.path.join(config["data_dir"], name))
+        folder = re.sub(r'[\\/:*?"<>|]', "_", name)     # имя папки без запрещённых в Windows символов
+        self.file = DataFile(os.path.join(config["data_dir"], folder))
         self.vac_u = VacUWindow(name)
         s, res = trainer.s, trainer.res
 
@@ -317,6 +324,17 @@ class ResonatorPanel(QtWidgets.QWidget):
 
     def add_log(self, msg):
         self.status.setText(f"{self.file_msg}    |    {time.strftime('%H:%M:%S')}  {msg}")
+        self.file.log(msg)                         # вся история - в журнал рядом с .dat
+
+    def save_settings(self):
+        """Настройки окна (Low, High, Step, пороги...) - в training_config.json, чтобы пережить перезапуск."""
+        s = dataclasses.asdict(self.tr.s)
+        s.pop("u_limit")                           # предел берётся из общего config
+        self.item["settings"] = s
+        try:
+            config_file.save(self.cfg)
+        except OSError as e:
+            self.add_log(f"Не удалось сохранить настройки: {e}")
 
     def enter_field(self, attr):
         """Поле настройки автоматики. Применяется по Enter (как в README)."""
@@ -344,6 +362,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.add_log(error)
             return False
         self.add_log(f"{attr} = {value:g}")
+        self.save_settings()
         return True
 
     def set_threshold(self, attr, in_amps):
@@ -374,6 +393,7 @@ class ResonatorPanel(QtWidgets.QWidget):
     def on_sequence(self, text):
         self.tr.s.sequence = text
         self.add_log(f"Sequence = {text}")
+        self.save_settings()
 
     def on_manual_u(self, value):
         if self.tr.state != MANUAL or value > self.tr.s.u_limit:
@@ -432,7 +452,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         if not auto and self.toggle.isChecked():   # программа сама сняла тумблер (дошли до Stop)
             self.toggle.setChecked(False)
             if tr.finished:
-                QtWidgets.QApplication.beep()      # TODO: фанфары
+                fanfare(self.cfg["data_dir"])       # дошли до Stop - фанфары (README, п.5)
         if not auto:
             tr.sync_direction(u_set)               # чтобы Start/Stop показывали правду
 

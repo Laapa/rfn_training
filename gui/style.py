@@ -73,6 +73,14 @@ def apply_theme(app, dark):
             w.setStyleSheet(w.styleSheet())
 
 
+def app_icon():
+    """Путь к иконке программы (ui/app.ico; в exe - внутри сборки)."""
+    import os
+    import sys
+    base = getattr(sys, "_MEIPASS", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    return os.path.join(base, "ui", "app.ico")
+
+
 def color(name):
     """Цвет по имени из старой программы ("green", "red", ...); "" - обычный цвет текста."""
     return C.get(name, name)
