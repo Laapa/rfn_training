@@ -61,7 +61,6 @@ class SimResonator:
             "i": noise(self.current),                 # I фидера (измеренный), А
             "p_fwd": p_cav + p_ref,                   # падающая, кВт
             "p_ref": p_ref,                           # отражённая, кВт
-            "phase": 30 + self.rnd.gauss(0, 0.5),     # фазометр, градусы
             "pump_a": self.vacuum * self.vac_coeff,   # ток насоса, А
             "ready": self.modulator,                  # лампочка «Готовность»
             "agc_u": True,                            # лампочки АРУ U / I

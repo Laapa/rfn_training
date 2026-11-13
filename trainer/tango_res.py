@@ -63,7 +63,6 @@ class TangoResonator:
         vac = self.read_vacuum()
         return {
             "u": u, "i": i, "p_fwd": p_fwd, "p_ref": p_ref,
-            "phase": None,                        # фазометра в device-серверах нет
             "pump_a": vac * self.vac_coeff,       # ток насоса, А
             "ready": st, "agc_u": au, "agc_i": ai,
         }

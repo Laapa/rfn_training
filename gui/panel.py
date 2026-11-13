@@ -116,7 +116,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.data = {}
         rows = (("u", "U резонатора", "кВ"), ("i", "I фидера", "A"), ("vac", "Вакуум", "Торр"),
                 ("pump", "I насоса", "A"), ("p_fwd", "Падающая", "кВт"), ("p_ref", "Отраженная", "кВт"),
-                ("phase", "Фазометр", "грд"), ("u_no", "U резонатора НО", "кВ"))
+                ("u_no", "U резонатора НО", "кВ"))
         grid = QtWidgets.QGridLayout()
         for k, (key, text, unit) in enumerate(rows):
             r, c = k % 4, (k // 4) * 3
@@ -444,7 +444,6 @@ class ResonatorPanel(QtWidgets.QWidget):
         show(d["pump"], f"{m['pump_a']:.1e}", vac_color(vac, s))
         show(d["p_fwd"], f"{m['p_fwd']:.2f}")
         show(d["p_ref"], f"{m['p_ref']:.2f}", "red" if m["p_ref"] > self.cfg["u_otr_max"] else "")
-        show(d["phase"], "—" if m["phase"] is None else f"{m['phase']:.2f}")
         show(d["u_no"], f"{u_no:.1f}")
         show(self.foot["pump"], f"{m['pump_a']:.1e}", vac_color(vac, s))
         show(self.foot["u"], f"{m['u']:.1f}")

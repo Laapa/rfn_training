@@ -57,7 +57,7 @@ def main():
         res = TangoResonator(devices={d: ctx.get_device_access(f"rf2/1e2/{d}") for d in ("mod", "cav", "sspa")})
         m = res.read_measurements()
         assert m["ready"] and m["agc_u"] and not m["agc_i"] and m["u"] == 10.0, m
-        assert m["p_fwd"] == 0.5 and m["phase"] is None
+        assert m["p_fwd"] == 0.5 and m["p_ref"] == 0.1
         print("ok чтение атрибутов:", m)
 
         res.set_current(2.5)
