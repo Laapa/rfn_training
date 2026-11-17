@@ -1,6 +1,8 @@
 """Показ значений и ламп: для настоящего резонатора (Tango) - виджеты Taurus, они сами читают
 атрибуты; для встроенного симулятора - обычные поля, их заполняет окно раз в тик.
 Писать в устройство Taurus-виджеты не умеют - уставки и команды идут только через нашу логику."""
+import sys
+
 from PyQt5 import QtWidgets, QtCore
 
 from gui.style import LAMP
@@ -8,7 +10,12 @@ from gui.widgets import Lamp, MONO
 
 
 def taurus_ok(res):
-    return hasattr(res, "model")          # у TangoResonator есть имена атрибутов, у симулятора нет
+    if not hasattr(res, "model"):         # у TangoResonator есть имена атрибутов, у симулятора нет
+        return False
+    if getattr(sys, "frozen", False):     # в exe Taurus не видит свои папки - говорим ему явно
+        from taurus import tauruscustomsettings
+        tauruscustomsettings.EXTRA_SCHEME_MODULES = ["taurus.core.tango"]
+    return True
 
 
 class ValueView(QtWidgets.QWidget):
