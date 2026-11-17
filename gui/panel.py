@@ -414,7 +414,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.curve_vac.setData(self.t, self.vac_hist)
         for attr, line in self.lines.items():
             line.setValue(math.log10(getattr(s, attr)))   # в лог-режиме ось = log10
-        self.vac_u.add(u_set, vac, n)
+        self.vac_u.add(u_set, vac)                # V(U) - за всё время работы программы
 
     def command(self, func, cmd):
         """Команда устройству (выполняется в потоке-работнике). «Сброс» гасит и память об ошибке автомата."""

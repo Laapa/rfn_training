@@ -93,7 +93,8 @@ gui/panel.py            окно резонатора (раскладка по �
 gui/views.py            ValueView / LedView / command_button: Taurus для Tango, обычные виджеты для симулятора
 gui/widgets.py          Lamp (кружок), StepField [−][значение][+], method_icon()
 gui/style.py            только цвета сигналов (C, LAMP) и иконка; своих тем/стилей нет — обычный вид Qt
-gui/vac_u.py            окно «Вакуум от U» + VacAxis (лог-ось с подписями 1e-09)
+gui/vac_u.py            окно «Вакуум от U» (все точки с запуска программы; одинаковые на глаз - U до 0.01 кВ,
+                        вакуум ~1% - хранятся один раз: неделя = ~16 тыс. точек) + VacAxis (лог-ось 1e-09)
 gui/viewer.py           «Просмотр записи»: .dat → 3 графика с выбором величины + журнал .log (щелчок = метка)
 gui/sound.py            фанфары (генерирует wav, играет winsound на Windows)
 fake_server/fake_rf.py  фейковый стенд: своя база Tango (SQLite) + устройства mod/cav/sspa с «физикой»

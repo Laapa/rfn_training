@@ -1,5 +1,6 @@
 """Отдельное окно «Вакуум от напряжения» (открывается кнопкой из окна резонатора)."""
 import math
+from datetime import datetime
 
 import pyqtgraph as pg
 from PyQt5 import QtWidgets
@@ -24,30 +25,54 @@ class VacAxis(pg.AxisItem):
 
 
 class VacUWindow(QtWidgets.QWidget):
+    """Все точки (уставка U, вакуум) с запуска программы - и когда окно закрыто тоже.
+    Одинаковые на глаз точки (та же U с точностью 0.01 кВ, тот же вакуум с точностью ~1%) храним один раз:
+    картинка та же, а точек тысячи, а не сотни тысяч - окно не тормозит хоть через неделю.
+    Сами значения каждую секунду - в .dat."""
     def __init__(self, name):
         super().__init__()
         self.setWindowTitle(f"{name} - вакуум от напряжения")
         self.resize(700, 450)
-        self.u, self.vac = [], []
+        self.points = set()     # (U*100, log10(вакуума)*200) - округлённые до целых
+        self.changed = False
         self.plot = pg.PlotWidget(axisItems={"left": VacAxis("left")})
         self.plot.setTitle("Vacuum (torr) vs Voltage (kV)", color="y", size="12pt")
         self.plot.setLogMode(y=True)
         self.plot.showGrid(x=True, y=True)
         self.curve = self.plot.plot(pen=None, symbol="o", symbolSize=3,
                                     symbolPen=None, symbolBrush="y")
+        self.info = QtWidgets.QLabel()
         clear = QtWidgets.QPushButton("Очистить график")
         clear.clicked.connect(self.clear)
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.addWidget(self.info, stretch=1)
+        bottom.addWidget(clear)
         lay = QtWidgets.QVBoxLayout(self)
         lay.addWidget(self.plot)
-        lay.addWidget(clear)
+        lay.addLayout(bottom)
+        self.started = datetime.now()
 
-    def add(self, u, vac, limit):
+    def add(self, u, vac):
         """Точки копятся всегда, даже когда окно закрыто; рисуем - только если открыто."""
-        self.u = (self.u + [u])[-limit:]
-        self.vac = (self.vac + [vac])[-limit:]
-        if self.isVisible():
-            self.curve.setData(self.u, self.vac)
+        if vac > 0:
+            point = (round(u * 100), round(math.log10(vac) * 200))
+            if point not in self.points:
+                self.points.add(point)
+                self.changed = True
+        if self.isVisible() and self.changed:
+            self.redraw()
+
+    def redraw(self):
+        self.changed = False
+        pts = list(self.points)
+        self.curve.setData([p[0] / 100 for p in pts], [10 ** (p[1] / 200) for p in pts])
+        self.info.setText(f"с {self.started:%Y-%m-%d %H:%M}, точек: {len(pts)}")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.redraw()
 
     def clear(self):
-        self.u, self.vac = [], []
-        self.curve.setData([], [])
+        self.points = set()
+        self.started = datetime.now()
+        self.redraw()
