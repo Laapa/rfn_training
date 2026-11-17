@@ -31,7 +31,13 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-import tango                                                      # noqa: E402
+try:
+    import tango                                                  # noqa: E402
+except ImportError:
+    sys.exit("Нет PyTango. Фейковый стенд запускается через fake_server\\start_fake.bat (окружение .venv_fake)")
+if int(tango.__version__.split(".")[0]) < 10:
+    sys.exit(f"Здесь PyTango {tango.__version__}, а фейку нужен PyTango 10 (в 9.x сломана встроенная база).\n"
+             "Запускай fake_server\\start_fake.bat - он сам сделает окружение .venv_fake")
 from tango import AttrWriteType                                   # noqa: E402
 from tango.server import Device, attribute, command, run          # noqa: E402
 

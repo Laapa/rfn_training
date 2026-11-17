@@ -22,6 +22,7 @@ from PyQt5 import QtWidgets, QtCore
 from gui import style
 from gui.sound import fanfare
 from gui.vac_u import VacAxis, VacUWindow
+from gui import views
 from gui.views import ValueView, LedView, command_button
 from gui.widgets import Lamp, Toggle, StepField, method_icon
 from trainer import config as config_file
@@ -253,6 +254,8 @@ class ResonatorPanel(QtWidgets.QWidget):
         main.addWidget(box_plots, stretch=1)      # всё свободное место - графикам
         main.addLayout(status)
         self.add_log(f"Запись в файл {self.short_name()}")
+        if hasattr(res, "model") and not views.TAURUS:
+            self.add_log("Taurus не установлен - значения без Taurus (pip install -r requirements.txt)")
 
     # ------------------------------------------------------------------ обработчики
 

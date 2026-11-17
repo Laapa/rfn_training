@@ -172,6 +172,10 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
     (ThreadPoolExecutor(1)), «--embedded» с NameError, DbGetServerList рекурсия, сервер «не определён в базе».
     В **PyTango 10.3.2** работает сразу → отдельное окружение для фейка.
   - Сначала порог блокировки был 3e-8 → «Готовность» постоянно тухла. Подняли до 1e-7.
+  - У пользователя (сеть ИЯФ) pip в `.venv_fake` не нашёл numpy («from versions: none») → `start_fake.bat` копирует
+    numpy из `.venv` программы; при неудаче удаляет недоделанный `.venv_fake`; проверяет `import tango, gevent`.
+  - `fake_rf.py` из `.venv` (PyTango 9.5.1) - понятное сообщение «нужен PyTango 10, запускай start_fake.bat».
+  - Нет Taurus в окружении → окно работает на обычных виджетах (`views.TAURUS`), в журнале подсказка.
   - Имя резонатора с «/» ломало папку данных → имя папки очищается от запрещённых символов.
 
 ## 8а. Устойчивость (ревью, ноябрь)

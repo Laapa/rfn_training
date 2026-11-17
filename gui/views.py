@@ -9,8 +9,15 @@ from gui.style import LAMP
 from gui.widgets import Lamp, MONO
 
 
+try:
+    import taurus                         # noqa: F401
+    TAURUS = True
+except ImportError:                       # не установлен - показываем обычными полями, всё работает так же
+    TAURUS = False
+
+
 def taurus_ok(res):
-    if not hasattr(res, "model"):         # у TangoResonator есть имена атрибутов, у симулятора нет
+    if not TAURUS or not hasattr(res, "model"):   # у TangoResonator есть имена атрибутов, у симулятора нет
         return False
     if getattr(sys, "frozen", False):     # в exe Taurus не видит свои папки - говорим ему явно
         from taurus import tauruscustomsettings
