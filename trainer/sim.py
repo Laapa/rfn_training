@@ -63,6 +63,8 @@ class SimResonator:
         p_cav = (u * 1e3) ** 2 / (2 * self.r_sh) / 1e3              # кВт в стенках
         p_ref = noise(0.15 * p_cav + 0.05)
         return {
+            "rf_on": self.modulator,                  # лампа «Вкл»
+            "fault": False,                           # для лампы «Авария»
             "u": u,                                   # U резонатора (измеренное), кВ
             "i": noise(self.current),                 # I фидера (измеренный), А
             "p_fwd": p_cav + p_ref,                   # падающая, кВт

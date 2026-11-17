@@ -19,6 +19,7 @@ class TangoResonator:
         nodb - устройства без базы Tango (фейковый сервер), prefix вида tango://localhost:45450/rf2/1e2"""
         tail = "#dbase=no" if nodb else ""
         devices = devices or {d: f"{prefix}/{d}{tail}" for d in ("mod", "cav", "sspa")}
+        self.devices = devices
         self.vac_coeff = vac_coeff
         self.vac_is_current = vac_is_current    # True, если Vac отдаёт ток насоса (А), а не Торр
         self.mod = tango.DeviceProxy(devices["mod"])
@@ -38,6 +39,11 @@ class TangoResonator:
             self.connected = False
             text = e.args[0].desc.strip().splitlines()[0] if e.args else str(e)   # первая строка
             raise IOError(text) from None
+
+    def model(self, dev, attr=None):
+        """Полное имя устройства/атрибута для Taurus: model("mod", "Ucav") -> rf2/1e2/mod/Ucav."""
+        name = self.devices[dev]
+        return f"{name}/{attr}" if attr else name
 
     # --- то, чем пользуется алгоритм
     def read_vacuum(self):
@@ -68,7 +74,10 @@ class TangoResonator:
         p_fwd, p_ref = (a.value for a in self._call(
             self.sspa.read_attributes, ["SspaPforw", "SspaPrefl"]))
         vac = self.read_vacuum()
+        state = self._call(self.mod.state)
         return {
+            "rf_on": state == tango.DevState.ON,                               # лампа «Вкл»
+            "fault": state in (tango.DevState.FAULT, tango.DevState.ALARM),     # для лампы «Авария»
             "u": u, "i": i, "p_fwd": p_fwd, "p_ref": p_ref,
             "pump_a": vac * self.vac_coeff,       # ток насоса, А
             "ready": st, "agc_u": au, "agc_i": ai,

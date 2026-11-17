@@ -1,5 +1,7 @@
 """Элементы интерфейса из старой программы в современном виде:
 лампочка, тумблер, поле со стрелками, ползунок «Точно / Грубо»."""
+import math
+
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from gui.style import LAMP, C
@@ -51,39 +53,44 @@ def value_box(width=80):
     return box
 
 
-class ArrowField(QtWidgets.QWidget):
-    """Поле ввода со стрелками вверх/вниз справа, как в старой программе.
-    Enter или стрелка -> on_change(новое значение). Если on_change вернул False - значение откатывается.
-    Шаг стрелок берётся из step() (обычно - из ползунка Точно/Грубо)."""
-    def __init__(self, value, unit, on_change, step, fmt="{:.2f}", width=80):
+class StepField(QtWidgets.QWidget):
+    """Поле [−] значение [+] (как TaurusValueSpinBox на эскизе).
+    Enter или −/+ -> on_change(новое значение); если on_change вернул False - значение откатывается.
+    log_step=True - шаг «по второй значащей цифре» (для вакуума: 2.0e-09 -> 2.1e-09)."""
+    def __init__(self, value, unit, on_change, step=1.0, fmt="{:g}", log_step=False, width=80):
         super().__init__()
-        self.on_change, self.step, self.fmt = on_change, step, fmt
+        self.on_change, self.step, self.fmt, self.log_step = on_change, step, fmt, log_step
         self.edit = QtWidgets.QLineEdit()
         self.edit.setFixedWidth(width)
         self.edit.setFont(MONO)
+        self.edit.setAlignment(QtCore.Qt.AlignRight)
         self.edit.returnPressed.connect(self.from_text)
-        up = QtWidgets.QPushButton("▲")
-        down = QtWidgets.QPushButton("▼")
-        for b in (up, down):
-            b.setFixedSize(24, 14)
-            b.setStyleSheet("padding: 0px; font-size: 6pt; border-radius: 4px;")
-        up.clicked.connect(lambda: self.apply(self.value + self.step()))
-        down.clicked.connect(lambda: self.apply(self.value - self.step()))
-        arrows = QtWidgets.QVBoxLayout()
-        arrows.setSpacing(1)
-        arrows.addWidget(up)
-        arrows.addWidget(down)
         lay = QtWidgets.QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(3)
-        lay.addWidget(self.edit)
-        lay.addLayout(arrows)
-        lay.addWidget(QtWidgets.QLabel(unit))
+        lay.setSpacing(2)
+        for sign, text in ((-1, "−"), (+1, "+")):
+            b = QtWidgets.QPushButton(text)
+            b.setFixedSize(26, 24)
+            b.setStyleSheet("padding: 0px; font-weight: bold;")
+            b.setAutoRepeat(True)                    # зажал - листает
+            b.clicked.connect(lambda _, k=sign: self.nudge(k))
+            lay.addWidget(b)
+            if sign < 0:
+                lay.addWidget(self.edit)
+        if unit:
+            lay.addWidget(QtWidgets.QLabel(unit))
         self.set_value(value)
 
     def set_value(self, value):      # показать значение, ничего не применяя
         self.value = value
         self.edit.setText(self.fmt.format(value))
+
+    def nudge(self, sign):
+        if self.log_step:
+            step = 10 ** (math.floor(math.log10(self.value)) - 1) if self.value > 0 else 1e-10
+        else:
+            step = self.step
+        self.apply(self.value + sign * step)
 
     def from_text(self):
         try:
@@ -92,33 +99,24 @@ class ArrowField(QtWidgets.QWidget):
             self.set_value(self.value)
 
     def apply(self, value):
-        value = round(max(value, 0.0), 6)
+        value = float(f"{max(value, 0.0):.6g}")      # без хвостов вида 0.30000000000000004
         if self.on_change(value) is False:
-            self.set_value(self.value)   # не приняли - вернуть старое
+            self.set_value(self.value)               # не приняли - вернуть старое
         else:
             self.set_value(value)
 
 
-class PrecisionSlider(QtWidgets.QWidget):
-    """Ползунок «Точно / Грубо», как в старой программе: 3 положения шага стрелок.
-    labels - подписи слева (сверху вниз), steps - шаги для каждого положения."""
-    def __init__(self, labels, steps):
-        super().__init__()
-        self.steps = steps
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Vertical)
-        self.slider.setRange(0, 2)
-        self.slider.setValue(1)
-        self.slider.setInvertedAppearance(True)       # верх = точно
-        self.slider.setFixedHeight(60)
-        grid = QtWidgets.QGridLayout(self)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setVerticalSpacing(0)
-        for r, text in enumerate(labels):
-            grid.addWidget(QtWidgets.QLabel(text), r, 0)
-        grid.addWidget(self.slider, 0, 1, 3, 1)
-        grid.addWidget(QtWidgets.QLabel("Точно"), 0, 2)
-        grid.addWidget(QtWidgets.QLabel("Грубо"), 2, 2)
-
-    def step(self, k=0):
-        """Шаг для поля k (у ручного управления два поля: U и I со своими шагами)."""
-        return self.steps[k][self.slider.value()]
+def method_icon(kind, w=44, h=20):
+    """Картинка метода тренировки (как на эскизе): вверх, вниз, туда-обратно, пила."""
+    shapes = {"up": [(0, 1), (1, 0)], "down": [(0, 0), (1, 1)],
+              "zone": [(0, 1), (0.5, 0), (1, 1)],
+              "saw": [(0, 1), (0.45, 0), (0.45, 1), (0.9, 0), (0.9, 1)]}
+    pix = QtGui.QPixmap(w, h)
+    pix.fill(QtCore.Qt.transparent)
+    p = QtGui.QPainter(pix)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.setPen(QtGui.QPen(QtGui.QColor(C["accent"]), 2))
+    pts = [QtCore.QPointF(2 + x * (w - 4), 2 + y * (h - 4)) for x, y in shapes[kind]]
+    p.drawPolyline(QtGui.QPolygonF(pts))
+    p.end()
+    return QtGui.QIcon(pix)
