@@ -5,7 +5,6 @@ import time
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from trainer import config as cfg
 from trainer.core import Trainer, Settings, MANUAL
 from gui import style
 from gui.panel import ResonatorPanel, STATE_TEXT, vac_color
@@ -43,11 +42,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(36)
-        self.table.setShowGrid(False)
-        dark = QtWidgets.QCheckBox("Тёмная тема")
-        dark.setChecked(config["dark_theme"])
-        dark.toggled.connect(self.on_theme)
         central = QtWidgets.QWidget()
         lay = QtWidgets.QVBoxLayout(central)
         lay.addWidget(self.table)
@@ -56,7 +50,6 @@ class MainWindow(QtWidgets.QMainWindow):
         bottom = QtWidgets.QHBoxLayout()
         bottom.addWidget(view_btn)
         bottom.addStretch()
-        bottom.addWidget(dark)
         lay.addLayout(bottom)
         self.setCentralWidget(central)
 
@@ -82,11 +75,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viewer = FileViewer(self.config["data_dir"])
         self.viewer.show()
         self.viewer.choose()
-
-    def on_theme(self, dark):
-        style.apply_theme(QtWidgets.QApplication.instance(), dark)
-        self.config["dark_theme"] = dark
-        cfg.save(self.config)                 # запомнить выбор
 
     def on_check(self, item):
         if item.column() != 0:

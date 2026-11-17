@@ -6,7 +6,6 @@ from datetime import datetime
 import pyqtgraph as pg
 from PyQt5 import QtWidgets, QtCore, QtGui
 
-from gui import style
 from gui.vac_u import VacAxis
 
 # колонки .dat после даты и времени (см. trainer/datafile.py); log - рисовать в лог-шкале
@@ -61,8 +60,7 @@ class FileViewer(QtWidgets.QWidget):
                 combo.addItem(text, key)
             combo.setCurrentIndex([c[0] for c in COLUMNS].index(DEFAULT[k]))
             combo.currentIndexChanged.connect(lambda _, n=k: self.draw(n))
-            plot = pg.PlotWidget(background=style.PLOT_BG,
-                                 axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
+            plot = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
             plot.showGrid(x=True, y=True, alpha=0.2)
             plot.setClipToView(True)
             plot.setDownsampling(auto=True)
@@ -91,7 +89,6 @@ class FileViewer(QtWidgets.QWidget):
             self.markers.append(line)
         log_box = QtWidgets.QGroupBox("Журнал событий (щёлкни по строке)")
         log_box.setMinimumWidth(380)
-        style.group(log_box, "cyan")
         QtWidgets.QVBoxLayout(log_box).addWidget(self.log_view)
 
         left = QtWidgets.QWidget()

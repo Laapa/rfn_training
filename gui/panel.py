@@ -24,7 +24,7 @@ from gui.sound import fanfare
 from gui.vac_u import VacAxis, VacUWindow
 from gui import views
 from gui.views import ValueView, LedView, command_button
-from gui.widgets import Lamp, Toggle, StepField, method_icon
+from gui.widgets import Lamp, StepField, method_icon
 from trainer import config as config_file
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
 from trainer.datafile import DataFile
@@ -54,9 +54,9 @@ def vac_color(vac, s):
     return ""
 
 
-def group_box(title, color, layout):
+def group_box(title, layout):
+    """Обычная рамка с подписью - чтобы отличать блоки."""
     box = QtWidgets.QGroupBox(title)
-    style.group(box, color)
     box.setLayout(layout)
     return box
 
@@ -93,9 +93,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.alarm = Lamp()             # «Авария» считаем сами: блокировка, нет связи, ошибка автомата
         self.alarm.setToolTip("Авария не горит")
         top.addWidget(self.alarm)
-        alarm_lbl = QtWidgets.QLabel("Авария")
-        alarm_lbl.setStyleSheet("font-weight: bold")
-        top.addWidget(alarm_lbl)
+        top.addWidget(QtWidgets.QLabel("Авария"))
         top.addStretch()
         for text, cmd, func in (("Вкл", "ModOn", res.mod_on), ("Выкл", "ModOff", res.mod_off),
                                 ("Сброс", "RstAll", res.reset_all)):
@@ -129,7 +127,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         vals.addWidget(QtWidgets.QLabel("уставка I"), 2, 1)
         vals.addWidget(self.i_field, 3, 1)
         vals.setColumnStretch(5, 1)                 # лишнее место - справа, а не между значениями
-        box_vals = group_box("Значения", "cyan", vals)
+        box_vals = group_box("Значения", vals)
 
         # ========== Тренировка: Umax, Umin, dU, dt, Timeout ==========
         grid = QtWidgets.QGridLayout()
@@ -144,7 +142,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             grid.addWidget(self.fields[attr], r, 1)
         self.fields["response_delay"].setToolTip("Response Delay: пауза перед шагом при хорошем вакууме")
         self.fields["timeout"].setToolTip("Timeout: сколько ждать Good после отступа, прежде чем отступить ещё")
-        self.box_train = group_box("Тренировка", "gray", grid)
+        self.box_train = group_box("Тренировка", grid)
 
         # ========== Вакуум: Vac2, Vac1, Vac0 + тумблер AUTO/MANUAL ==========
         grid = QtWidgets.QGridLayout()
@@ -155,10 +153,8 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.fields[attr].edit.setStyleSheet(f"color: {style.color(color)}")
             grid.addWidget(label, r, 0)
             grid.addWidget(self.fields[attr], r, 1)
-        self.toggle = Toggle()
+        self.toggle = QtWidgets.QCheckBox("AUTO (автоматическая тренировка)")
         self.toggle.clicked.connect(self.on_auto)          # clicked - только от пользователя
-        self.mode = QtWidgets.QLabel("MANUAL")
-        self.mode.setStyleSheet("font-weight: bold; font-size: 12pt")
         self.lamp_auto = Lamp()
         self.btn_start = QtWidgets.QPushButton("Start")
         self.btn_stop = QtWidgets.QPushButton("Stop")
@@ -168,14 +164,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.btn_rev.clicked.connect(self.tr.reverse)
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.toggle)
-        row.addWidget(self.mode)
         row.addStretch()
         grid.addLayout(row, 3, 0, 1, 2)
         row = QtWidgets.QHBoxLayout()
         for w in (self.lamp_auto, self.btn_start, self.btn_stop, self.btn_rev):
             row.addWidget(w)
         grid.addLayout(row, 4, 0, 1, 2)
-        box_vac = group_box("Вакуум", "green", grid)
+        box_vac = group_box("Вакуум", grid)
 
         # ========== Метод: один из списка ==========
         lay = QtWidgets.QVBoxLayout()
@@ -191,7 +186,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.method_buttons[seq] = b
             lay.addWidget(b)
         lay.addStretch()
-        box_method = group_box("Метод", "darkblue", lay)
+        box_method = group_box("Метод", lay)
 
         controls = QtWidgets.QHBoxLayout()
         for box in (self.box_train, box_vac, box_method):
@@ -199,13 +194,12 @@ class ResonatorPanel(QtWidgets.QWidget):
         controls.addStretch(1)
 
         # ========== Графики ==========
-        self.plot_u = pg.PlotWidget(background=style.PLOT_BG, axisItems={"bottom": pg.DateAxisItem()})
+        self.plot_u = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem()})
         self.plot_u.setTitle("Ucav (kV)", color="y", size="10pt")
         self.plot_u.addLegend(offset=(10, 5))
         self.curve_u = self.plot_u.plot(pen=pg.mkPen((255, 0, 0)), name="Ucav")
         self.curve_u_set = self.plot_u.plot(pen=pg.mkPen("y", style=QtCore.Qt.DashLine), name="уставка")
-        self.plot_vac = pg.PlotWidget(background=style.PLOT_BG,
-                                      axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
+        self.plot_vac = pg.PlotWidget(axisItems={"bottom": pg.DateAxisItem(), "left": VacAxis("left")})
         self.plot_vac.setTitle("Vac (torr)", color="y", size="10pt")
         self.plot_vac.setLogMode(y=True)
         self.curve_vac = self.plot_vac.plot(pen=pg.mkPen((255, 0, 0)))
@@ -230,15 +224,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         plots.addLayout(head)
         plots.addWidget(self.plot_u, stretch=1)
         plots.addWidget(self.plot_vac, stretch=1)
-        box_plots = group_box("Графики", "darkblue", plots)
+        box_plots = group_box("Графики", plots)
 
         # ========== Строка состояния ==========
         self.state_lbl = QtWidgets.QLabel()
-        self.state_lbl.setStyleSheet("font-weight: bold")
         self.msg = QtWidgets.QLabel()
         self.msg.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
         self.clock = QtWidgets.QLabel()
-        self.clock.setStyleSheet("font-family: Consolas; font-size: 11pt")
         status = QtWidgets.QHBoxLayout()
         status.addWidget(self.state_lbl)
         status.addSpacing(12)
@@ -415,14 +407,13 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.alarm.setToolTip(reason or "Авария не горит")
 
     def show_mode(self, auto):
-        """AUTO: рамка «Тренировки» красная, уставка U заблокирована, работают Start/Stop/Reverse."""
+        """AUTO: подпись рамки «Тренировка (AUTO)», уставка U заблокирована, работают Start/Stop/Reverse."""
         tr = self.tr
         self.lamp_auto.set("green" if auto and not (tr.paused or tr.not_ready) else "red")
         if auto == self.shown_auto:
             return
         self.shown_auto = auto
-        style.group(self.box_train, "red" if auto else "gray", auto)
-        self.mode.setText("AUTO" if auto else "MANUAL")
+        self.box_train.setTitle("Тренировка (AUTO)" if auto else "Тренировка")
         for b in (self.btn_start, self.btn_stop, self.btn_rev):
             b.setEnabled(auto)
         self.u_field.setEnabled(not auto)          # в AUTO напряжение ведёт алгоритм

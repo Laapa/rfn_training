@@ -59,7 +59,6 @@ if __name__ == "__main__":
     app.setApplicationName("Тренировка резонаторов")
     app.setWindowIcon(QtGui.QIcon(style.app_icon()))
     config, message = cfg.load(sys.argv[1] if len(sys.argv) > 1 else None)
-    style.apply_theme(app, config["dark_theme"])
     window = MainWindow(make_resonators(config), config, message)
     window.resize(900, 260)   # окна резонаторов встают в половины экрана сами
     window.show()

@@ -44,7 +44,7 @@ class ValueView(QtWidgets.QWidget):
         self.box.setFont(MONO)
         self.box.setFixedWidth(115)
         self.box.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.color("")                      # одинаковая подложка у Taurus и у обычного поля
+        self.color("")
         lay.addWidget(self.box)
 
     def set(self, text):
@@ -52,10 +52,7 @@ class ValueView(QtWidgets.QWidget):
             self.box.setText(text)
 
     def color(self, color):
-        css = ("background: palette(alternate-base); border: 1px solid transparent;"
-               " border-radius: 6px; padding: 3px 6px;")
-        if color:
-            css += f" color: {color}; font-weight: bold;"
+        css = f"color: {color}; font-weight: bold;" if color else ""
         if getattr(self, "_css", None) != css:          # не дёргать стиль каждую секунду без нужды
             self._css = css
             self.box.setStyleSheet(css)
