@@ -79,8 +79,14 @@ python main.py fake_config.json     другой файл настроек
 build_exe.bat
 ```
 
-Результат — папка `dist\Training` с `Training.exe` (копировать папку целиком).
-`training_config.json` и `data` создаются рядом с exe.
+Собирает окружением `.venv` (PyInstaller ставит туда сам). Результат — папка `dist\Training`
+с `Training.exe` (копировать папку целиком). `training_config.json` и `data` создаются рядом с exe.
+
+Проверить exe на фейковом стенде (фейк запущен):
+```
+cd dist\Training
+.\Training.exe ..\..\fake_config.json
+```
 
 ## Проверки кода
 

@@ -7,8 +7,7 @@ a = Analysis(
     # иконка окна + файлы и «паспорт» Taurus (он ищет свои модули по нему)
     datas=[("ui/app.ico", "ui")] + collect_data_files("taurus") + copy_metadata("taurus") + copy_metadata("pint"),
     # PyTango и Taurus подгружаются по ходу работы - перечисляем явно
-    hiddenimports=["tango"] + collect_submodules("taurus.core") + collect_submodules("taurus.qt.qtgui.display")
-                  + collect_submodules("taurus.qt.qtgui.button"),
+    hiddenimports=["tango"] + collect_submodules("taurus.core") + collect_submodules("taurus.qt.qtgui.display"),
     excludes=["PyQt5.QtWebEngineWidgets", "PyQt5.QtWebEngineCore", "matplotlib", "scipy"],
 )
 pyz = PYZ(a.pure)
