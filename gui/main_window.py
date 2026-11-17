@@ -1,8 +1,6 @@
 """Главное окно «Обзор»: таблица всех резонаторов.
 Галка в первом столбце открывает/закрывает отдельное окно резонатора.
 Закрытое окно не останавливает тренировку - она идёт, пока работает программа."""
-import time
-
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from trainer.core import Trainer, Settings, MANUAL
@@ -29,12 +27,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """resonators - список пар (имя, объект резонатора), config - из training_config.json."""
         super().__init__()
         self.setWindowTitle("Тренировка резонаторов - обзор")
-        # Время алгоритма, с - по настоящим часам, а не по числу тиков: если тик задержался
-        # (Tango долго отвечал), dt и Timeout всё равно отсчитываются честно.
-        # tick_ms меньше 1000 ускоряет время (для симулятора): 200 -> в 5 раз быстрее.
-        self.now = 0.0
-        self.t0 = time.monotonic()
-        self.speed = 1000 / config["tick_ms"]
         self.config = config
 
         self.table = QtWidgets.QTableWidget(len(resonators), len(COLUMNS))
@@ -95,13 +87,11 @@ class MainWindow(QtWidgets.QMainWindow):
         panel.move(screen.x() + (index % 2) * half, screen.y())
 
     def tick(self):
-        self.now = (time.monotonic() - self.t0) * self.speed
         self.table.blockSignals(True)   # чтобы обновление галок не вызывало on_check
         for row, panel in enumerate(self.panels):
-            tr = panel.tr
-            tr.tick(self.now)
+            tr = panel.tr                # сам алгоритм крутится в потоке-работнике панели
             try:
-                panel.update_view(self.now)
+                panel.update_view()
             except Exception as e:      # ошибка в одном окне не должна ронять всю программу
                 panel.add_log(f"Ошибка обновления: {e}")
 

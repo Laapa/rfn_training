@@ -74,6 +74,7 @@ class Trainer:
     def enable(self, now):
         """Поставили галку AUTO. Возвращает False, если начать нельзя."""
         s = self.s
+        self.finished = False
         if s.check():
             self.log(s.check() + ", тренировка не запущена")
             return False

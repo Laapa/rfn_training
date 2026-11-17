@@ -87,5 +87,6 @@ build_exe.bat
 ```
 python -m tests.test_core       алгоритм
 python -m tests.test_tango      работа через Tango (на тестовых device-серверах)
+python -m tests.test_worker     окно не ждёт устройство (поток-работник)
 python run_sim.py               прогон алгоритма в консоли
 ```

@@ -8,6 +8,9 @@
 
 Значения и лампы с устройства показывают виджеты Taurus (gui/views.py), только для чтения.
 Уставки и команды - через нашу логику, чтобы в AUTO никто не крутил U в обход автомата.
+
+С устройством окно само не разговаривает: это делает поток-работник (trainer/worker.py), окно только
+показывает его последние значения и передаёт ему действия. Поэтому стенд, который не отвечает, не вешает окно.
 """
 import dataclasses
 import math
@@ -28,6 +31,7 @@ from gui.widgets import Lamp, StepField, method_icon
 from trainer import config as config_file
 from trainer.core import UP, DOWN, ZONE, SAW, MANUAL
 from trainer.datafile import DataFile
+from trainer.worker import Worker
 
 STATE_TEXT = {
     "MANUAL": "Ручной режим",
@@ -62,16 +66,19 @@ def group_box(title, layout):
 
 
 class ResonatorPanel(QtWidgets.QWidget):
+    log_signal = QtCore.pyqtSignal(str)    # журнал из потока-работника -> в окно (Qt-виджеты - только из окна)
+
     def __init__(self, name, trainer, config, item=None):
         """item - запись этого резонатора в training_config.json (туда сохраняются настройки окна)."""
         super().__init__()
         self.setWindowTitle(name)
         self.name = name
         self.tr = trainer
+        self.log_signal.connect(self.show_log)
         self.tr.log = self.add_log
+        self.worker = Worker(trainer, config["tick_ms"])
         self.cfg = config
         self.item = item if item is not None else {}
-        self.now = 0
         self.u_text = "—"                  # последняя прочитанная уставка U (для «Обзора»)
         self.shown_auto = None             # какой режим сейчас нарисован (рамки)
         self.link_ok = True                # была ли связь в прошлый тик (пишем в журнал только перемены)
@@ -97,9 +104,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         top.addStretch()
         for text, cmd, func in (("Вкл", "ModOn", res.mod_on), ("Выкл", "ModOff", res.mod_off),
                                 ("Сброс", "RstAll", res.reset_all)):
-            b = command_button(res, text, cmd, func, self.add_log)
-            if cmd == "RstAll":         # «Сброс» гасит и нашу память об ошибке автомата
-                b.clicked.connect(lambda: setattr(self.tr, "error", ""))
+            b = command_button(text, lambda f=func, c=cmd: self.worker.do(self.command, f, c), self.add_log)
             top.addWidget(b)
 
         # ========== Значения (+ уставки U и I под ними) ==========
@@ -114,12 +119,9 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.values[key] = ValueView(res, dev, attr, fmt)
             vals.addWidget(QtWidgets.QLabel(text), 0, col)
             vals.addWidget(self.values[key], 1, col)
-        try:                                        # нет связи при запуске - не страшно, окно всё равно откроется
-            u0, i0 = res.read_setpoint(), res.read_current()
-        except Exception:
-            u0 = i0 = 0.0                           # настоящие значения подставит первый же тик со связью
-        self.u_field = StepField(u0, "", self.on_manual_u, step=0.5, fmt="{:.2f}")
-        self.i_field = StepField(i0, "", self.on_manual_i, step=0.1, fmt="{:.2f}")
+        # настоящие значения уставок подставит первый же тик со связью
+        self.u_field = StepField(0.0, "", self.on_manual_u, step=0.5, fmt="{:.2f}")
+        self.i_field = StepField(0.0, "", self.on_manual_i, step=0.1, fmt="{:.2f}")
         self.u_field.setToolTip("Уставка U резонатора (ручной режим)")
         self.i_field.setToolTip("Уставка тока фидера - и в ручном, и в AUTO")
         vals.addWidget(QtWidgets.QLabel("уставка U"), 2, 0)
@@ -159,9 +161,9 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.btn_start = QtWidgets.QPushButton("Start")
         self.btn_stop = QtWidgets.QPushButton("Stop")
         self.btn_rev = QtWidgets.QPushButton("Reverse")
-        self.btn_start.clicked.connect(lambda: self.tr.set_paused(False))
-        self.btn_stop.clicked.connect(lambda: self.tr.set_paused(True))
-        self.btn_rev.clicked.connect(self.tr.reverse)
+        self.btn_start.clicked.connect(lambda: self.worker.do(self.tr.set_paused, False))
+        self.btn_stop.clicked.connect(lambda: self.worker.do(self.tr.set_paused, True))
+        self.btn_rev.clicked.connect(lambda: self.worker.do(self.tr.reverse))
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.toggle)
         row.addStretch()
@@ -248,10 +250,15 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.add_log(f"Запись в файл {self.short_name()}")
         if hasattr(res, "model") and not views.TAURUS:
             self.add_log("Taurus не установлен - значения без Taurus (pip install -r requirements.txt)")
+        self.worker.start()
 
     # ------------------------------------------------------------------ обработчики
 
     def add_log(self, msg):
+        """Можно звать из любого потока: само сообщение покажет окно (show_log)."""
+        self.log_signal.emit(msg)
+
+    def show_log(self, msg):
         self.msg.setText(f"{time.strftime('%H:%M:%S')}  {msg}")
         self.file.log(msg)                         # вся история - в журнал рядом с .dat
 
@@ -271,71 +278,79 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.add_log(f"Не удалось сохранить настройки: {e}")
 
     def set_param(self, attr, value):
-        """Изменить настройку. Ерунду не принимаем (возвращаем False)."""
-        old = getattr(self.tr.s, attr)
-        setattr(self.tr.s, attr, value)
-        error = self.tr.s.check()
+        """Изменить настройку. Ерунду не принимаем (возвращаем False).
+        Проверяем на копии, чтобы работающий автомат ни на миг не увидел ерунду."""
+        error = dataclasses.replace(self.tr.s, **{attr: value}).check()
         if error:
-            setattr(self.tr.s, attr, old)
             self.add_log(error)
             return False
+        setattr(self.tr.s, attr, value)
         self.add_log(f"{attr} = {value:g}")
         self.save_settings()
         return True
 
     def on_auto(self, checked):
+        """Галка AUTO. Если включить нельзя, автомат останется в MANUAL и галку снимет update_view."""
         if checked:
-            if not self.tr.enable(self.now):
-                self.toggle.setChecked(False)
+            self.worker.do(lambda: self.tr.enable(self.worker.now()))
         else:
-            self.tr.disable()
+            self.worker.do(self.tr.disable)
 
     def on_sequence(self, seq):
         if self.tr.s.sequence != seq:
-            self.tr.set_sequence(seq)               # направление - сразу
+            self.worker.do(self.tr.set_sequence, seq)   # направление - сразу
+            self.tr.s.sequence = seq                 # чтобы сохранилось уже сейчас
             self.add_log(f"Метод: {seq}")
             self.save_settings()
 
     def on_manual_u(self, value):
         if self.tr.state != MANUAL or value > self.tr.s.u_limit:
             return False
-        try:
-            self.tr.res.set_voltage(value)
-        except Exception as e:
-            self.add_log(f"Уставка U не записалась: {e}")
-            return False
-        self.add_log(f"Вручную: U = {value:.2f} кВ")
+
+        def write():
+            if self.tr.state != MANUAL:             # пока ждали очереди, включили AUTO
+                return
+            try:
+                self.tr.res.set_voltage(value)
+                self.add_log(f"Вручную: U = {value:.2f} кВ")
+            except Exception as e:
+                self.add_log(f"Уставка U не записалась: {e}")
+        self.worker.do(write)                        # если не записалось - поле вернёт значение с устройства
 
     def on_manual_i(self, value):
         if value > self.cfg["i_max_a"]:
             return False
-        try:
-            self.tr.res.set_current(value)          # ток фидера - и в ручном, и в AUTO
-        except Exception as e:
-            self.add_log(f"Уставка I не записалась: {e}")
-            return False
-        self.add_log(f"I фидера = {value:.2f} А")
+
+        def write():
+            try:
+                self.tr.res.set_current(value)       # ток фидера - и в ручном, и в AUTO
+                self.add_log(f"I фидера = {value:.2f} А")
+            except Exception as e:
+                self.add_log(f"Уставка I не записалась: {e}")
+        self.worker.do(write)
 
     # ------------------------------------------------------------------ раз в тик
 
-    def update_view(self, now):
-        """Вызывается главным окном после каждого tick()."""
-        self.now = now
-        tr, s, res = self.tr, self.tr.s, self.tr.res
+    def update_view(self):
+        """Вызывается главным окном раз в тик. С устройством не разговаривает - берёт снимок у работника."""
+        tr, s = self.tr, self.tr.s
         auto = tr.state != MANUAL
         t = datetime.now()
         self.clock.setText(t.strftime("%Y-%m-%d %H:%M:%S ") + DAYS[t.weekday()])
         self.show_mode(auto)
-        if not auto and self.toggle.isChecked():   # программа сама сняла тумблер (Stop или обрыв связи)
-            self.toggle.setChecked(False)
-            if tr.finished:
+        if not self.worker.busy() and self.toggle.isChecked() != auto:   # галка = состояние автомата
+            self.toggle.setChecked(auto)
+            if not auto and tr.finished:
                 fanfare(self.cfg["data_dir"])       # дошли до Stop - фанфары (README, п.5)
+                tr.finished = False
 
-        try:
-            m = res.read_measurements()
-            u_set = res.read_setpoint()
-            current = res.read_current()
-        except Exception as e:                     # нет связи: авария, прочерки, в файл не пишем
+        snap = self.worker.snapshot
+        if snap is None:                           # работник ещё ни разу не прочитал устройство
+            return
+        e = snap.error
+        if not e and time.monotonic() - snap.stamp > max(5.0, 5 * self.worker.period):
+            e = "устройство не отвечает"           # работник завис на вызове Tango
+        if e:                                      # нет связи: авария, прочерки, в файл не пишем
             self.set_alarm(f"Нет связи с устройством: {e}")
             for v in self.values.values():
                 v.set("—")
@@ -347,9 +362,10 @@ class ResonatorPanel(QtWidgets.QWidget):
         if not self.link_ok:
             self.add_log("Связь с устройством восстановлена")
             self.link_ok = True
+        m, u_set, current = snap.m, snap.u_set, snap.current
         self.u_text = f"{u_set:.2f}"
         vac = tr.vacuum
-        if not auto:
+        if not auto and not self.worker.busy():
             tr.sync_direction(u_set)               # чтобы Start/Stop показывали правду
 
         # --- значения (у симулятора; Taurus обновляет себя сам) и цвета
@@ -399,6 +415,16 @@ class ResonatorPanel(QtWidgets.QWidget):
         for attr, line in self.lines.items():
             line.setValue(math.log10(getattr(s, attr)))   # в лог-режиме ось = log10
         self.vac_u.add(u_set, vac, n)
+
+    def command(self, func, cmd):
+        """Команда устройству (выполняется в потоке-работнике). «Сброс» гасит и память об ошибке автомата."""
+        try:
+            func()
+        except Exception as e:
+            self.add_log(f"Команда {cmd} не прошла: {e}")
+            return
+        if cmd == "RstAll":
+            self.tr.error = ""
 
     def set_alarm(self, reason):
         """Лампа «Авария»: горит, если есть причина (блокировка, нет связи, автомат сам вышел из AUTO

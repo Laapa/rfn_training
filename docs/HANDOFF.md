@@ -83,6 +83,8 @@ main.py                 запуск: python main.py [config.json]; High-DPI; с
 trainer/core.py         Trainer + Settings — алгоритм (без Qt и Tango), тесты tests/test_core.py
 trainer/sim.py          SimResonator — встроенный симулятор (пробои, откачка, тренировка); u_from_power()
 trainer/tango_res.py    TangoResonator — через PyTango: prefix/mod, cav, sspa; model() даёт имена для Taurus
+trainer/worker.py       Worker - поток на каждый резонатор: tick() алгоритма, чтение снимка значений, очередь
+                        действий от кнопок. Окно с Tango само НЕ разговаривает (tests/test_worker.py)
 trainer/config.py       training_config.json рядом с программой/exe; load(path), save(); data_dir рядом с config
 trainer/datafile.py     запись .dat (раз в тик) + журнал .log в data/<резонатор>/ГГГГ-ММ-ДД@ЧЧ-ММ-СС.*
 gui/main_window.py      окно «Обзор»: таблица резонаторов, галка = открыть окно резонатора,
@@ -117,7 +119,7 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
 ## 6. Интерфейс — текущий вид и история
 
 **Текущий (по эскизу научного, коммит 4d1a43f):** окно резонатора сверху вниз:
-1. Лампы: Вкл (mod/State) · RDY (ModSt) · АРУ U · АРУ I · **Авария**; справа кнопки **Вкл / Выкл / Сброс** (TaurusCommandButton).
+1. Лампы: Вкл (mod/State) · RDY (ModSt) · АРУ U · АРУ I · **Авария**; справа кнопки **Вкл / Выкл / Сброс** (обычные кнопки через поток-работник).
 2. «Значения»: Ucav, Iфид, Pпад, Pотр, Vac (TaurusLabel, только чтение; Vac цветом по порогам, Pотр красная > u_otr_max);
    под Ucav/Iфид — поля «уставка U» и «уставка I» (StepField, пишут через нашу логику; U заблокирована в AUTO).
 3. «Тренировка»: Umax, Umin, dU, dt, Timeout (StepField). «Вакуум»: Vac2/Vac1/Vac0 (−/+ по 2-й значащей цифре),
@@ -187,6 +189,19 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
 - `main.py`: `sys.excepthook` → `error.log` рядом с config + окно с ошибкой (в exe нет консоли; PyQt5 иначе молча
   закрывается при ошибке в обработчике).
 - При обрыве связи в AUTO галка AUTO сразу встаёт в MANUAL. Кривые `settings` в config → значения по умолчанию.
+
+## 8б. Потоки (после зависания у пользователя)
+
+- У пользователя на Windows окно «Не отвечает» после остановки фейка: вызов Tango к остановленному устройству/базе
+  на Windows висит секунды (в Linux - отказ мгновенно), а вызовы шли из потока окна.
+- Теперь: `trainer/worker.py` - поток на резонатор. Он крутит `Trainer.tick` и читает `Snapshot`
+  (m, u_set, current, error, stamp). Окно (`update_view`) берёт снимок; снимок старше 5 тиков = «не отвечает».
+  Уставки, команды, AUTO, Start/Stop/Reverse, метод -> `worker.do(...)`. Галка AUTO = состояние автомата
+  (пока очередь не пуста - не трогаем). Журнал из потока -> `log_signal` -> окно.
+- Кнопки Вкл/Выкл/Сброс - обычные QPushButton через работника (TaurusCommandButton выполнял команду в окне).
+  Taurus остался для показа значений и ламп (у него свой поток опроса).
+- Проверено: 3 «мёртвых» резонатора (каждый вызов висит 2 с) - окно не замирает дольше 70 мс;
+  фейк: AUTO -> убить фейк -> MANUAL, «Авария» -> поднять фейк -> «Связь восстановлена».
 
 ## 9. Что проверено / что нет
 

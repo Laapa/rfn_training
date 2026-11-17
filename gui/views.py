@@ -79,14 +79,9 @@ class LedView(QtWidgets.QWidget):
             self.led.set(color)
 
 
-def command_button(res, text, command, func, log):
-    """Кнопка команды. Tango -> TaurusCommandButton, симулятор -> обычная кнопка. Всё пишется в журнал."""
-    if taurus_ok(res):
-        from taurus.qt.qtgui.button import TaurusCommandButton
-        b = TaurusCommandButton(command=command, text=text)
-        b.setModel(res.model("mod"))
-        b.commandExecuted.connect(lambda _: log(f"Команда: {text} ({command})"))
-        return b
+def command_button(text, func, log):
+    """Кнопка команды (Вкл/Выкл/Сброс). Обычная кнопка, а не TaurusCommandButton: та выполняет команду
+    прямо в окне, и при неотвечающем стенде окно зависло бы. func сама передаёт команду потоку-работнику."""
     b = QtWidgets.QPushButton(text)
 
     def run():
