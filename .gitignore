@@ -1,8 +1,11 @@
 *.pyc
+.venv/
+.venv_fake/
 __pycache__/
 build/
 data/
 data_fake/
 dist/
 fake_config.json
+fake_server/db_data/
 training_config.json

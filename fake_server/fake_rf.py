@@ -1,14 +1,17 @@
 """Фейковый стенд для проверки программы без железа.
 
-Поднимает device-серверы <prefix>/mod, <prefix>/cav, <prefix>/sspa с ТЕМИ ЖЕ именами атрибутов
-и команд, что на стенде, и простой «физикой» внутри. Работает без базы Tango, настоящие
-устройства в вашей базе не трогает.
+Поднимает СВОЮ маленькую базу Tango (SQLite, файл в fake_server/db_data) и в ней устройства
+<prefix>/mod, <prefix>/cav, <prefix>/sspa с ТЕМИ ЖЕ именами атрибутов и команд, что на стенде,
+и простой «физикой» внутри. Программа и Taurus видят их по обычным именам через TANGO_HOST,
+как на настоящем стенде. Вашу настоящую базу Tango не трогает.
+
+Нужен PyTango 10 (в 9.5.1 встроенная база сломана) - отдельное окружение, см. start_fake.bat.
 
 Запуск (в отдельном окне, держать открытым):
-    python fake_server/fake_rf.py              3 резонатора, порт 45450
-    python fake_server/fake_rf.py 2 45460      2 резонатора, порт 45460
+    python fake_server/fake_rf.py              3 резонатора, база на порту 10123
+    python fake_server/fake_rf.py 2 10200      2 резонатора, база на порту 10200
 Потом программа:
-    python main.py fake_config.json            (fake_config.json создаёт этот скрипт)
+    python main.py fake_config.json            (fake_config.json создаёт/обновляет этот скрипт)
 
 Что умеет «стенд»:
   - U резонатора плавно (2 кВ/с) выходит на уставку UcavSetpoint; ВЧ выключен - U = 0
@@ -21,13 +24,14 @@
 """
 import json
 import os
+import subprocess
 import sys
-import tempfile
 import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+import tango                                                      # noqa: E402
 from tango import AttrWriteType                                   # noqa: E402
 from tango.server import Device, attribute, command, run          # noqa: E402
 
@@ -77,6 +81,13 @@ def plant(device):
 
 
 class Mod(Device):
+    def dev_state(self):
+        """Состояние устройства: ON - ВЧ включено, FAULT - сработала блокировка, OFF - выключено."""
+        p = plant(self)
+        if p.tripped:
+            return tango.DevState.FAULT
+        return tango.DevState.ON if p.on else tango.DevState.OFF
+
     ModSt = attribute(dtype=bool, fget=lambda self: plant(self).on and not plant(self).tripped)
     ModU = attribute(dtype=bool, fget=lambda self: True)       # АРУ работает по U
     ModI = attribute(dtype=bool, fget=lambda self: False)
@@ -122,37 +133,79 @@ class Sspa(Device):
     SspaPrefl = attribute(dtype=float, unit="kW", fget=lambda self: plant(self).powers()[1])
 
 
-def main(count=3, port=45450, config_name="fake_config.json"):
+HERE = os.path.dirname(os.path.abspath(__file__))
+SERVER = "FakeRF/fake"                         # имя сервера в базе
+
+
+def start_database(port):
+    """Запустить свою базу Tango (SQLite) отдельным процессом и дождаться, пока ответит."""
+    folder = os.path.join(HERE, "db_data")
+    os.makedirs(folder, exist_ok=True)
+    log = open(os.path.join(folder, "database.log"), "w")
+    proc = subprocess.Popen([sys.executable, "-m", "tango.databaseds.database", "--port", str(port), "2"],
+                            cwd=folder, env=dict(os.environ), stdout=log, stderr=subprocess.STDOUT)
+    for _ in range(120):
+        if proc.poll() is not None:
+            sys.exit(f"База Tango не запустилась, подробности: {folder}\\database.log\n"
+                     f"(порт {port} занят? другой порт: python fake_server/fake_rf.py 3 10200)")
+        try:
+            tango.Database()
+            return proc
+        except tango.DevFailed:
+            time.sleep(0.5)
+    proc.kill()
+    sys.exit("База Tango не отвечает 60 с")
+
+
+def register(prefixes):
+    """Прописать устройства фейка в базе (повторно - не страшно)."""
+    db = tango.Database()
+    for cls, d in (("Mod", "mod"), ("Cav", "cav"), ("Sspa", "sspa")):
+        for p in prefixes:
+            info = tango.DbDevInfo()
+            info.name, info._class, info.server = f"{p}/{d}", cls, SERVER
+            db.add_device(info)
+
+
+def write_config(config_name, port, prefixes):
+    """fake_config.json для программы. Если уже есть - обновляем адреса, настройки окон не трогаем."""
+    config = {"tick_ms": 1000, "data_dir": "data_fake"}
+    if os.path.exists(config_name):
+        with open(config_name, encoding="utf-8") as f:
+            config = json.load(f)
+    # старые записи по короткому префиксу rf2/1e2 (чтобы сохранить настройки окон)
+    old = {"/".join(r["prefix"].split("/")[-2:]): r for r in config.get("resonators", []) if r.get("prefix")}
+    config["tango_host"] = f"127.0.0.1:{port}"
+    config["resonators"] = []
+    for p in prefixes:
+        item = old.get(p, {"name": f"Фейк {p}"})
+        item.update({"type": "tango", "prefix": p})
+        item.pop("nodb", None)
+        config["resonators"].append(item)
+    with open(config_name, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+
+
+def main(count=3, port=10123, config_name="fake_config.json"):
     prefixes = [f"rf{k + 2}/1e{k + 2}" for k in range(count)]
     for k, p in enumerate(prefixes):       # rf2 «чистый» до 8 кВ, rf3 - до 11, rf4 - до 14 ...
         PLANTS[p] = Plant(k)
 
-    config = {
-        "tick_ms": 1000,
-        "data_dir": "data_fake",
-        "resonators": [{"name": f"Фейк {p}", "type": "tango", "nodb": True,
-                        "prefix": f"tango://127.0.0.1:{port}/{p}"} for p in prefixes],
-    }
-    if not os.path.exists(config_name):        # не затираем, если там уже сохранены настройки
-        with open(config_name, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
-        print(f"Создан {config_name}")
+    os.environ["TANGO_HOST"] = f"127.0.0.1:{port}"     # всё дальше - через нашу базу
+    database = start_database(port)
+    try:
+        register(prefixes)
+        write_config(config_name, port, prefixes)
 
-    # Вместо базы Tango - маленький файл с описанием устройств (так Tango умеет работать без базы)
-    db_file = os.path.join(tempfile.gettempdir(), "fake_rf_db.txt")
-    with open(db_file, "w") as f:
-        for cls, d in (("Mod", "mod"), ("Cav", "cav"), ("Sspa", "sspa")):
-            f.write(f"FakeRF/fake/DEVICE/{cls}: " + ", ".join(f"{p}/{d}" for p in prefixes) + "\n")
+        def ready():
+            print(f"Фейковый стенд работает: база Tango 127.0.0.1:{port}, устройства " + ", ".join(prefixes))
+            print(f"Запусти программу:  python main.py {config_name}")
+            print(f"Jive/Taurus тоже увидят его с TANGO_HOST=127.0.0.1:{port}")
+            print("Остановить стенд: Ctrl+C (так же можно проверить обрыв связи)")
 
-    def ready():
-        print(f"Фейковый стенд работает на порту {port}: " + ", ".join(prefixes))
-        print(f"Запусти программу:  python main.py {config_name}")
-        print("Остановить стенд: Ctrl+C (так же можно проверить обрыв связи)")
-
-    # обычный запуск device-сервера, как у настоящих, в основном потоке
-    run((Mod, Cav, Sspa),
-        args=["FakeRF", "fake", "-ORBendPoint", f"giop:tcp:127.0.0.1:{port}", f"-file={db_file}"],
-        post_init_callback=ready)
+        run((Mod, Cav, Sspa), args=["FakeRF", "fake"], post_init_callback=ready)
+    finally:
+        database.terminate()                           # базу - вместе со стендом
 
 
 if __name__ == "__main__":
