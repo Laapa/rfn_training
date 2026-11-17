@@ -1,6 +1,8 @@
 """Главное окно «Обзор»: таблица всех резонаторов.
 Галка в первом столбце открывает/закрывает отдельное окно резонатора.
 Закрытое окно не останавливает тренировку - она идёт, пока работает программа."""
+import time
+
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from trainer import config as cfg
@@ -12,8 +14,11 @@ from gui.viewer import FileViewer
 def load_settings(saved, u_limit):
     """Настройки резонатора, сохранённые в прошлый раз. Если там ерунда - по умолчанию."""
     known = {k: v for k, v in saved.items() if k in Settings.__dataclass_fields__ and k != "u_limit"}
-    settings = Settings(**known, u_limit=u_limit)
-    return Settings(u_limit=u_limit) if settings.check() else settings
+    try:
+        settings = Settings(**known, u_limit=u_limit)
+        return Settings(u_limit=u_limit) if settings.check() else settings
+    except TypeError:                     # в файле руками написали, например, "abc" вместо числа
+        return Settings(u_limit=u_limit)
 
 
 COLUMNS = ["Резонатор", "Режим", "Состояние", "U, кВ", "Вакуум, Торр", "Start → Stop"]
@@ -25,7 +30,12 @@ class MainWindow(QtWidgets.QMainWindow):
         """resonators - список пар (имя, объект резонатора), config - из training_config.json."""
         super().__init__()
         self.setWindowTitle("Тренировка резонаторов - обзор")
-        self.now = 0   # время алгоритма, с (1 тик = 1 с)
+        # Время алгоритма, с - по настоящим часам, а не по числу тиков: если тик задержался
+        # (Tango долго отвечал), dt и Timeout всё равно отсчитываются честно.
+        # tick_ms меньше 1000 ускоряет время (для симулятора): 200 -> в 5 раз быстрее.
+        self.now = 0.0
+        self.t0 = time.monotonic()
+        self.speed = 1000 / config["tick_ms"]
         self.config = config
 
         self.table = QtWidgets.QTableWidget(len(resonators), len(COLUMNS))
@@ -97,7 +107,7 @@ class MainWindow(QtWidgets.QMainWindow):
         panel.move(screen.x() + (index % 2) * half, screen.y())
 
     def tick(self):
-        self.now += 1
+        self.now = (time.monotonic() - self.t0) * self.speed
         self.table.blockSignals(True)   # чтобы обновление галок не вызывало on_check
         for row, panel in enumerate(self.panels):
             tr = panel.tr

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 UP, DOWN, ZONE = "Processing UP", "Processing DOWN", "ZONE"
 SAW = "SAW (пила)"   # плавно Low -> High, резко в Low, снова вверх
+EPS = 1e-3           # допуск сравнения уставки со Stop, кВ (1 В): устройство может вернуть 24.999998 вместо 25
 
 # Состояния автомата
 MANUAL = "MANUAL"        # тренировка выключена
@@ -34,14 +35,16 @@ class Settings:
 
     def check(self):
         """Пустая строка, если настройки в порядке, иначе текст ошибки."""
+        if self.sequence not in (UP, DOWN, ZONE, SAW):
+            return f"Неизвестный метод {self.sequence}"
         if self.step <= 0:
             return "Step должен быть больше 0"
         if self.low >= self.high:
             return "Low должен быть меньше High"
         if self.low < 0 or self.high > self.u_limit:
             return f"Low и High должны быть в пределах 0..{self.u_limit:g} кВ"
-        if not self.good < self.bad < self.very_bad:
-            return "Нужно Good < Bad < Very Bad"
+        if not 0 < self.good < self.bad < self.very_bad:
+            return "Нужно 0 < Good < Bad < Very Bad"
         return ""
 
 
@@ -57,6 +60,7 @@ class Trainer:
         self.vacuum = 0.0       # последнее прочитанное значение (для экрана)
         self.paused = False     # кнопка Stop/Start: шаги вперёд на паузе, защита работает
         self.not_ready = False  # нет «Готовности» (ВЧ выключено/блокировка) - автомат стоит
+        self.error = ""         # почему автомат сам вышел из AUTO (ошибка связи) - для лампы «Авария»
 
     # Start и Stop не вводятся, а вычисляются из Low/High и направления
     @property
@@ -75,12 +79,13 @@ class Trainer:
             return False
         u = self.res.read_setpoint()
         self.sync_direction(u)
-        if s.sequence in (UP, DOWN) and (u - self.stop) * self.direction >= 0:
+        if s.sequence in (UP, DOWN) and self.at_or_past_stop(u):
             self.log(f"Уставка {u:.2f} кВ уже на Stop или за ним, тренировка не запущена")
             return False
         self.finished = False
         self.paused = False
         self.not_ready = False
+        self.error = ""
         self.state = WAIT_GOOD
         self.log(f"AUTO: {s.sequence}, Start {self.start} кВ, Stop {self.stop} кВ")
         return True
@@ -96,7 +101,8 @@ class Trainer:
             self._tick(now)
         except Exception as e:
             if self.state != MANUAL:
-                self.log(f"Ошибка связи: {e}. Тренировка остановлена")
+                self.error = f"Ошибка связи: {e}"
+                self.log(f"{self.error}. Тренировка остановлена")
                 self.disable()
 
     def _tick(self, now):
@@ -159,13 +165,23 @@ class Trainer:
         self.paused = paused
         self.log("Пауза" if paused else "Продолжаем")
 
+    def set_sequence(self, seq):
+        """Сменить метод (можно на ходу). Направление - сразу, чтобы отступ при Very Bad
+        и стрелка ▲/▼ не жили по старому методу до следующего шага."""
+        self.s.sequence = seq
+        if seq in (UP, SAW):
+            self.direction = +1
+        elif seq == DOWN:
+            self.direction = -1
+        # ZONE: едем туда же, куда ехали
+
     def reverse(self):
         """Кнопка Reverse: развернуть направление."""
         s = self.s
         if s.sequence == UP:
-            s.sequence = DOWN
+            self.set_sequence(DOWN)
         elif s.sequence == DOWN:
-            s.sequence = UP
+            self.set_sequence(UP)
         elif s.sequence == ZONE:
             self.direction = -self.direction
         else:
@@ -174,6 +190,10 @@ class Trainer:
         self.log(f"Reverse: теперь Stop {self.stop:g} кВ")
 
     # ---------------------------------------------------------------------
+
+    def at_or_past_stop(self, u):
+        """Уставка u уже на Stop или за ним (с допуском EPS)."""
+        return (u - self.stop) * self.direction >= -EPS
 
     def sync_direction(self, u):
         if self.s.sequence in (UP, SAW):
@@ -187,7 +207,7 @@ class Trainer:
         u = self.res.read_setpoint()
         self.sync_direction(u)      # Sequence могли поменять на ходу
         self.state = WAIT_GOOD
-        if (u - self.stop) * self.direction < 0:   # до Stop ещё не дошли - шаг
+        if not self.at_or_past_stop(u):            # до Stop ещё не дошли - шаг
             u = u + self.direction * self.s.step
             if (u - self.stop) * self.direction > 0:
                 u = self.stop       # не перескакиваем Stop
@@ -195,7 +215,7 @@ class Trainer:
             self.log(f"Шаг -> {u:.2f} кВ")
             if self.s.sequence == SAW:
                 return              # на High стоим одну выдержку, сброс - следующим шагом
-        if (u - self.stop) * self.direction >= 0:  # на Stop (или Low/High поменяли на ходу)
+        if self.at_or_past_stop(u):                # на Stop (или Low/High поменяли на ходу)
             self._at_stop()
 
     def _at_stop(self):

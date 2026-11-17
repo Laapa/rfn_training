@@ -53,6 +53,9 @@ def load(path=None):
 
 def save(config):
     data = dict(config)
-    data["data_dir"] = os.path.relpath(config["data_dir"], os.path.dirname(PATH))   # хранить коротко
+    try:
+        data["data_dir"] = os.path.relpath(config["data_dir"], os.path.dirname(PATH))   # хранить коротко
+    except ValueError:      # Windows: папка данных на другом диске (D:\ а config на C:\) - храним полный путь
+        pass
     with open(PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)

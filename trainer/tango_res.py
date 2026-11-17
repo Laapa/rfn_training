@@ -22,17 +22,22 @@ class TangoResonator:
         self.devices = devices
         self.vac_coeff = vac_coeff
         self.vac_is_current = vac_is_current    # True, если Vac отдаёт ток насоса (А), а не Торр
-        self.mod = tango.DeviceProxy(devices["mod"])
-        self.cav = tango.DeviceProxy(devices["cav"])
-        self.sspa = tango.DeviceProxy(devices["sspa"])
-        for d in (self.mod, self.cav, self.sspa):
-            d.set_timeout_millis(timeout_ms)    # зависшее устройство не должно вешать программу надолго
+        self.timeout_ms = timeout_ms
+        self.proxies = {}                       # подключаемся при первом обращении (см. _call)
         self.connected = True
 
-    def _call(self, func, *args):
-        """Любое обращение к Tango: запоминаем, есть ли связь (для лампочки/сообщений)."""
+    def _call(self, dev, method, *args):
+        """Любое обращение к Tango: _call("mod", "read_attribute", "Ucav").
+        Подключение к устройству - здесь же, при первой надобности: если стенд (или база Tango)
+        недоступен при запуске, программа всё равно откроется и будет пробовать снова каждый тик.
+        Запоминаем, есть ли связь (для лампы «Авария» и сообщений)."""
         try:
-            result = func(*args)
+            proxy = self.proxies.get(dev)
+            if proxy is None:
+                proxy = tango.DeviceProxy(self.devices[dev])
+                proxy.set_timeout_millis(self.timeout_ms)   # зависшее устройство не вешает программу надолго
+                self.proxies[dev] = proxy
+            result = getattr(proxy, method)(*args)
             self.connected = True
             return result
         except tango.DevFailed as e:
@@ -48,33 +53,33 @@ class TangoResonator:
     # --- то, чем пользуется алгоритм
     def read_vacuum(self):
         """Вакуум в Торр."""
-        v = self._call(self.cav.read_attribute, "Vac").value
+        v = self._call("cav", "read_attribute", "Vac").value
         return v / self.vac_coeff if self.vac_is_current else v
 
     def read_ready(self):
         """«Готовность» модулятора (mod/ModSt)."""
-        return self._call(self.mod.read_attribute, "ModSt").value
+        return self._call("mod", "read_attribute", "ModSt").value
 
     def read_setpoint(self):
-        return self._call(self.mod.read_attribute, "UcavSetpoint").value
+        return self._call("mod", "read_attribute", "UcavSetpoint").value
 
     def set_voltage(self, kv):
-        self._call(self.mod.write_attribute, "UcavSetpoint", float(kv))
+        self._call("mod", "write_attribute", "UcavSetpoint", float(kv))
 
     def read_current(self):
-        return self._call(self.mod.read_attribute, "IfidSetpoint").value
+        return self._call("mod", "read_attribute", "IfidSetpoint").value
 
     def set_current(self, a):
-        self._call(self.mod.write_attribute, "IfidSetpoint", float(a))
+        self._call("mod", "write_attribute", "IfidSetpoint", float(a))
 
     # --- то, что показывает окно
     def read_measurements(self):
         st, au, ai, u, i = (a.value for a in self._call(
-            self.mod.read_attributes, ["ModSt", "ModU", "ModI", "Ucav", "Ifid"]))
+            "mod", "read_attributes", ["ModSt", "ModU", "ModI", "Ucav", "Ifid"]))
         p_fwd, p_ref = (a.value for a in self._call(
-            self.sspa.read_attributes, ["SspaPforw", "SspaPrefl"]))
+            "sspa", "read_attributes", ["SspaPforw", "SspaPrefl"]))
         vac = self.read_vacuum()
-        state = self._call(self.mod.state)
+        state = self._call("mod", "state")
         return {
             "rf_on": state == tango.DevState.ON,                               # лампа «Вкл»
             "fault": state in (tango.DevState.FAULT, tango.DevState.ALARM),     # для лампы «Авария»
@@ -85,10 +90,10 @@ class TangoResonator:
 
     # --- кнопки
     def reset_all(self):
-        self._call(self.mod.command_inout, "RstAll")
+        self._call("mod", "command_inout", "RstAll")
 
     def mod_on(self):
-        self._call(self.mod.command_inout, "ModOn")
+        self._call("mod", "command_inout", "ModOn")
 
     def mod_off(self):
-        self._call(self.mod.command_inout, "ModOff")
+        self._call("mod", "command_inout", "ModOff")

@@ -83,6 +83,16 @@ def main():
     assert tr.state == MANUAL and not res.connected
     print("ok обрыв связи -> MANUAL")
 
+    # стенда нет совсем: создать резонатор можно (программа откроется), чтение - понятная ошибка
+    dead = TangoResonator(devices={d: f"tango://127.0.0.1:1/rf9/1e9/{d}#dbase=no" for d in ("mod", "cav", "sspa")})
+    try:
+        dead.read_vacuum()
+        raise AssertionError("должна быть ошибка связи")
+    except IOError:
+        pass
+    assert not dead.connected
+    print("ok запуск без стенда не падает")
+
 
 if __name__ == "__main__":
     main()

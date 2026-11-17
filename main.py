@@ -4,6 +4,8 @@
 """
 import os
 import sys
+import traceback
+from datetime import datetime
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 
@@ -31,7 +33,24 @@ def make_resonators(config):
     return result
 
 
+def show_error(kind, value, tb):
+    """Любая непойманная ошибка: в exe нет консоли, поэтому пишем её в error.log рядом с настройками
+    и показываем окно. Заодно PyQt5 не закрывает программу молча из-за ошибки в обработчике кнопки."""
+    text = "".join(traceback.format_exception(kind, value, tb))
+    path = os.path.join(os.path.dirname(cfg.PATH), "error.log")
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"--- {datetime.now():%Y-%m-%d %H:%M:%S}\n{text}\n")
+    except OSError:
+        pass
+    if QtWidgets.QApplication.instance():
+        QtWidgets.QMessageBox.critical(None, "Ошибка", f"{value}\n\nПодробности: {path}")
+    else:
+        print(text, file=sys.stderr)
+
+
 if __name__ == "__main__":
+    sys.excepthook = show_error
     # Масштаб Windows (125%, 150%, 4K): без этих строк PyQt5 рисует мелко или мыльно.
     # Ставятся ДО создания QApplication.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)

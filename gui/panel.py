@@ -73,6 +73,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.now = 0
         self.u_text = "—"                  # последняя прочитанная уставка U (для «Обзора»)
         self.shown_auto = None             # какой режим сейчас нарисован (рамки)
+        self.link_ok = True                # была ли связь в прошлый тик (пишем в журнал только перемены)
         self.t, self.u_hist, self.u_set_hist, self.vac_hist = [], [], [], []
         folder = re.sub(r'[\\/:*?"<>|]', "_", name)     # имя папки без запрещённых в Windows символов
         self.file = DataFile(os.path.join(config["data_dir"], folder))
@@ -89,7 +90,7 @@ class ResonatorPanel(QtWidgets.QWidget):
             top.addWidget(QtWidgets.QLabel(text))
             top.addSpacing(10)
         self.alarm = Lamp()             # «Авария» считаем сами: блокировка, нет связи, ошибка автомата
-        self.alarm.setToolTip("Авария: сработала блокировка (FAULT), нет связи с устройством или ошибка автомата")
+        self.alarm.setToolTip("Авария не горит")
         top.addWidget(self.alarm)
         alarm_lbl = QtWidgets.QLabel("Авария")
         alarm_lbl.setStyleSheet("font-weight: bold")
@@ -97,7 +98,10 @@ class ResonatorPanel(QtWidgets.QWidget):
         top.addStretch()
         for text, cmd, func in (("Вкл", "ModOn", res.mod_on), ("Выкл", "ModOff", res.mod_off),
                                 ("Сброс", "RstAll", res.reset_all)):
-            top.addWidget(command_button(res, text, cmd, func, self.add_log))
+            b = command_button(res, text, cmd, func, self.add_log)
+            if cmd == "RstAll":         # «Сброс» гасит и нашу память об ошибке автомата
+                b.clicked.connect(lambda: setattr(self.tr, "error", ""))
+            top.addWidget(b)
 
         # ========== Значения (+ уставки U и I под ними) ==========
         self.values = {}
@@ -111,8 +115,12 @@ class ResonatorPanel(QtWidgets.QWidget):
             self.values[key] = ValueView(res, dev, attr, fmt)
             vals.addWidget(QtWidgets.QLabel(text), 0, col)
             vals.addWidget(self.values[key], 1, col)
-        self.u_field = StepField(res.read_setpoint(), "", self.on_manual_u, step=0.5, fmt="{:.2f}")
-        self.i_field = StepField(res.read_current(), "", self.on_manual_i, step=0.1, fmt="{:.2f}")
+        try:                                        # нет связи при запуске - не страшно, окно всё равно откроется
+            u0, i0 = res.read_setpoint(), res.read_current()
+        except Exception:
+            u0 = i0 = 0.0                           # настоящие значения подставит первый же тик со связью
+        self.u_field = StepField(u0, "", self.on_manual_u, step=0.5, fmt="{:.2f}")
+        self.i_field = StepField(i0, "", self.on_manual_i, step=0.1, fmt="{:.2f}")
         self.u_field.setToolTip("Уставка U резонатора (ручной режим)")
         self.i_field.setToolTip("Уставка тока фидера - и в ручном, и в AUTO")
         vals.addWidget(QtWidgets.QLabel("уставка U"), 2, 0)
@@ -289,7 +297,7 @@ class ResonatorPanel(QtWidgets.QWidget):
 
     def on_sequence(self, seq):
         if self.tr.s.sequence != seq:
-            self.tr.s.sequence = seq
+            self.tr.set_sequence(seq)               # направление - сразу
             self.add_log(f"Метод: {seq}")
             self.save_settings()
 
@@ -323,25 +331,29 @@ class ResonatorPanel(QtWidgets.QWidget):
         t = datetime.now()
         self.clock.setText(t.strftime("%Y-%m-%d %H:%M:%S ") + DAYS[t.weekday()])
         self.show_mode(auto)
+        if not auto and self.toggle.isChecked():   # программа сама сняла тумблер (Stop или обрыв связи)
+            self.toggle.setChecked(False)
+            if tr.finished:
+                fanfare(self.cfg["data_dir"])       # дошли до Stop - фанфары (README, п.5)
 
         try:
             m = res.read_measurements()
             u_set = res.read_setpoint()
             current = res.read_current()
         except Exception as e:                     # нет связи: авария, прочерки, в файл не пишем
-            self.alarm.set("red")
+            self.set_alarm(f"Нет связи с устройством: {e}")
             for v in self.values.values():
                 v.set("—")
-            self.add_log(f"Нет связи с устройством: {e}")
+            if self.link_ok:                       # в журнал - только момент обрыва, не каждую секунду
+                self.add_log(f"Нет связи с устройством: {e}")
+                self.link_ok = False
             self.u_text = "нет связи"
             return
+        if not self.link_ok:
+            self.add_log("Связь с устройством восстановлена")
+            self.link_ok = True
         self.u_text = f"{u_set:.2f}"
         vac = tr.vacuum
-
-        if not auto and self.toggle.isChecked():   # программа сама сняла тумблер (дошли до Stop)
-            self.toggle.setChecked(False)
-            if tr.finished:
-                fanfare(self.cfg["data_dir"])       # дошли до Stop - фанфары (README, п.5)
         if not auto:
             tr.sync_direction(u_set)               # чтобы Start/Stop показывали правду
 
@@ -360,7 +372,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.leds["rdy"].set("green" if m["ready"] else "red")
         self.leds["agc_u"].set("green" if m["agc_u"] else "gray")
         self.leds["agc_i"].set("green" if m["agc_i"] else "gray")
-        self.alarm.set("red" if m["fault"] else "gray")
+        self.set_alarm("Сработала блокировка (State FAULT/ALARM)" if m["fault"] else tr.error)
 
         # --- поля уставок показывают то, что реально стоит в устройстве (пока в них не печатают)
         if not self.u_field.edit.hasFocus():
@@ -392,6 +404,12 @@ class ResonatorPanel(QtWidgets.QWidget):
         for attr, line in self.lines.items():
             line.setValue(math.log10(getattr(s, attr)))   # в лог-режиме ось = log10
         self.vac_u.add(u_set, vac, n)
+
+    def set_alarm(self, reason):
+        """Лампа «Авария»: горит, если есть причина (блокировка, нет связи, автомат сам вышел из AUTO
+        из-за ошибки). Причина - во всплывающей подсказке. Ошибку автомата гасит «Сброс» или новый AUTO."""
+        self.alarm.set("red" if reason else "gray")
+        self.alarm.setToolTip(reason or "Авария не горит")
 
     def show_mode(self, auto):
         """AUTO: рамка «Тренировки» красная, уставка U заблокирована, работают Start/Stop/Reverse."""

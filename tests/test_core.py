@@ -176,6 +176,9 @@ def test_link_error_goes_manual():
     res.read_vacuum = broken
     tr.tick(1)
     assert tr.state == MANUAL and res.u == 21     # напряжение не тронули
+    assert tr.error                               # причина - для лампы «Авария»
+    res.read_vacuum = lambda: res.vac
+    assert tr.enable(2) and not tr.error          # новый AUTO гасит ошибку
 
 
 def test_high_limit():
@@ -187,6 +190,42 @@ def test_high_limit():
 def test_refuse_past_stop():
     res, tr = make(23)
     assert not tr.enable(0)
+
+
+
+def test_good_must_be_positive():
+    res, tr = make(21)
+    tr.s.good = 0                     # иначе log10(0) на графике вакуума
+    assert tr.s.check() != ""
+
+
+def test_stop_with_float_rounding():
+    res, tr = make(21.999998)         # устройство вернуло 22 «с хвостиком» (float32)
+    assert not tr.enable(0)           # это уже Stop - не запускаемся
+    res, tr = make(20)
+    tr.enable(0)
+    real_set = res.set_voltage
+    res.set_voltage = lambda kv: real_set(kv - 2e-6)   # каждая запись чуть «недолетает»
+    run(tr, 0, 200)
+    assert tr.finished and abs(res.u - 22) < 1e-5
+
+
+def test_reverse_changes_direction_at_once():
+    res, tr = make(21)
+    tr.enable(0)
+    res.vac = VERY_BAD
+    tr.tick(1)                        # отступили вниз (метод UP)
+    assert tr.state == BACKOFF and res.u == 20
+    tr.reverse()                      # теперь DOWN: «назад» - это вверх
+    assert tr.direction == -1
+    tr.tick(12)                       # Timeout прошёл - отступаем ещё, уже вверх (до Start = 22)
+    assert res.u == 21.5
+
+
+def test_unknown_method():
+    res, tr = make(21)
+    tr.s.sequence = "abc"
+    assert tr.s.check() != ""
 
 
 if __name__ == "__main__":
