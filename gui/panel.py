@@ -383,7 +383,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         self.leds["rdy"].set("green" if m["ready"] else "red")
         self.leds["agc_u"].set("green" if m["agc_u"] else "gray")
         self.leds["agc_i"].set("green" if m["agc_i"] else "gray")
-        self.set_alarm("Сработала блокировка (State FAULT/ALARM)" if m["fault"] else tr.error)
+        self.set_alarm("Сработала блокировка (FAULT)" if m["fault"] else tr.error)
 
         # --- поля уставок показывают то, что реально стоит в устройстве (пока в них не печатают)
         if not self.u_field.edit.hasFocus():

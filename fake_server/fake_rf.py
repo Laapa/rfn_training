@@ -26,7 +26,6 @@ import json
 import os
 import subprocess
 import sys
-import threading
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -41,41 +40,9 @@ if int(tango.__version__.split(".")[0]) < 10:
 from tango import AttrWriteType                                   # noqa: E402
 from tango.server import Device, attribute, command, run          # noqa: E402
 
-from trainer.sim import SimResonator                              # noqa: E402
+from fake_server.plant import Plant                               # noqa: E402
 
-TRIP_TORR = 1e-7      # вакуум хуже этого - срабатывает блокировка
-SLEW_KV_S = 2.0       # скорость выхода U на уставку, кВ/с
 PLANTS = {}           # prefix -> Plant (один «резонатор» стенда)
-
-
-class Plant:
-    def __init__(self, k):
-        self.sim = SimResonator(conditioned=8 + 3 * k, spark_rate=0.05)   # вакуум, пробои, тренировка
-        self.u_set = 0.0       # UcavSetpoint
-        self.i_set = 0.0       # IfidSetpoint
-        self.u = 0.0           # реальное U на резонаторе
-        self.on = True         # ВЧ включен
-        self.tripped = False   # сработала блокировка
-        self.t = time.time()
-        self.lock = threading.Lock()
-
-    def update(self):
-        """Догнать физику до текущего момента (шагами по 1 с)."""
-        with self.lock:
-            steps = int(time.time() - self.t)
-            self.t += steps
-            for _ in range(min(steps, 120)):
-                target = self.u_set if self.on else 0.0
-                self.u += max(-SLEW_KV_S, min(SLEW_KV_S, target - self.u))
-                self.sim.setpoint = self.u          # пробои зависят от реального U
-                if self.sim.read_vacuum() > TRIP_TORR and self.on:
-                    self.on, self.tripped = False, True
-                    print(f"  блокировка: вакуум {self.sim.vacuum:.1e} Торр, ВЧ выключен")
-
-    def powers(self):
-        p_cav = (self.u * 1e3) ** 2 / (2 * self.sim.r_sh) / 1e3   # кВт в стенках
-        p_ref = 0.15 * p_cav + (0.05 if self.on else 0.0)
-        return p_cav + p_ref, p_ref
 
 
 def plant(device):
@@ -94,7 +61,7 @@ class Mod(Device):
             return tango.DevState.FAULT
         return tango.DevState.ON if p.on else tango.DevState.OFF
 
-    ModSt = attribute(dtype=bool, fget=lambda self: plant(self).on and not plant(self).tripped)
+    ModSt = attribute(dtype=bool, fget=lambda self: plant(self).ready())
     ModU = attribute(dtype=bool, fget=lambda self: True)       # АРУ работает по U
     ModI = attribute(dtype=bool, fget=lambda self: False)
     Ucav = attribute(dtype=float, unit="kV", fget=lambda self: plant(self).u)
@@ -111,17 +78,15 @@ class Mod(Device):
 
     @command
     def ModOn(self):
-        p = plant(self)
-        if not p.tripped:
-            p.on = True
+        plant(self).mod_on()
 
     @command
     def ModOff(self):
-        plant(self).on = False
+        plant(self).mod_off()
 
     @command
     def RstAll(self):
-        plant(self).tripped = False
+        plant(self).rst_all()
 
 
 class Cav(Device):
@@ -130,8 +95,7 @@ class Cav(Device):
     @command
     def Spike(self):
         """Пробой вручную: вакуум резко хуже."""
-        p = plant(self)
-        p.sim.vacuum += 1.5e-7          # хуже TRIP_TORR - сработает блокировка
+        plant(self).spike()
 
 
 class Sspa(Device):

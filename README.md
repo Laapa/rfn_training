@@ -71,6 +71,32 @@ python main.py fake_config.json     другой файл настроек
 
 Резонаторы стенда «чистые» до 8 / 11 / 14 кВ — выше начинаются пробои.
 
+## EPICS (вместо или вместе с Tango)
+
+Резонатор с `"type": "epics"` работает через EPICS Channel Access (`pyepics`, библиотека CA уже внутри —
+ставить EPICS не нужно). Имена PV — по шаблону `<prefix>:<MOD|CAV|SSPA>:<имя>`, как атрибуты Tango:
+`RF2:MOD:Ucav`, `RF2:MOD:UcavSetpoint`, `RF2:CAV:Vac`, `RF2:SSPA:SspaPforw`…; команды — запись 1 в
+`RF2:MOD:ModOn` / `ModOff` / `RstAll`; лампы «Вкл»/«Авария» — `RF2:MOD:RfOn` / `RF2:MOD:Fault`.
+Настоящие имена стенда пока неизвестны — любое имя заменяется в config:
+
+```json
+"epics_ca_addr_list": "10.0.0.5",
+"resonators": [
+    {"name": "Резонатор 2", "type": "epics", "prefix": "RF2",
+     "pv": {"Ucav": "RF2:CAV:Voltage", "RfOn": null, "Fault": null}}
+]
+```
+`null` — такого PV на стенде нет («Вкл» тогда берётся из «Готовности», «Авария» — только по связи).
+`epics_ca_addr_list` — адреса IOC (или CA gateway); пусто — обычный поиск EPICS в своей подсети.
+Значения и лампы EPICS-резонатора показываются обычными полями (без Taurus).
+
+Фейковый EPICS-стенд (IOC на `caproto`, только на этом компьютере), два окна:
+```
+fake_server\start_fake_epics.bat
+python main.py fake_epics_config.json
+```
+Пробой вручную: `python fake_server\spike_epics.py RF2`. Проверки — те же, что для Tango-фейка.
+
 ## Сборка exe
 
 На Windows:
@@ -94,5 +120,6 @@ cd dist\Training
 python -m tests.test_core       алгоритм
 python -m tests.test_tango      работа через Tango (на тестовых device-серверах)
 python -m tests.test_worker     окно не ждёт устройство (поток-работник)
+python -m tests.test_epics      работа через EPICS (на EPICS-фейке, порт 5099)
 python run_sim.py               прогон алгоритма в консоли
 ```

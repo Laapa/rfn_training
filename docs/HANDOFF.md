@@ -85,6 +85,8 @@ trainer/sim.py          SimResonator — встроенный симулятор
 trainer/tango_res.py    TangoResonator — через PyTango: prefix/mod, cav, sspa; model() даёт имена для Taurus
 trainer/worker.py       Worker - поток на каждый резонатор: tick() алгоритма, чтение снимка значений, очередь
                         действий от кнопок. Окно с Tango само НЕ разговаривает (tests/test_worker.py)
+trainer/epics_res.py    EpicsResonator - то же через EPICS (pyepics, Channel Access); PV по шаблону
+                        <prefix>:<MOD|CAV|SSPA>:<имя>, любое меняется в config ("pv": {...}); tests/test_epics.py
 trainer/config.py       training_config.json рядом с программой/exe; load(path), save(); data_dir рядом с config
 trainer/datafile.py     запись .dat (раз в тик) + журнал .log в data/<резонатор>/ГГГГ-ММ-ДД@ЧЧ-ММ-СС.*
 gui/main_window.py      окно «Обзор»: таблица резонаторов, галка = открыть окно резонатора,
@@ -98,6 +100,9 @@ gui/vac_u.py            окно «Вакуум от U» (все точки с �
 gui/viewer.py           «Просмотр записи»: .dat → 3 графика с выбором величины + журнал .log (щелчок = метка)
 gui/sound.py            фанфары (генерирует wav, играет winsound на Windows)
 fake_server/fake_rf.py  фейковый стенд: своя база Tango (SQLite) + устройства mod/cav/sspa с «физикой»
+fake_server/plant.py    «физика» фейка (общая для Tango- и EPICS-фейка)
+fake_server/fake_epics.py   EPICS-фейк: IOC на caproto, PV RF2:MOD:Ucav..., только 127.0.0.1;
+                        start_fake_epics.bat (в .venv), spike_epics.py - пробой
 fake_server/start_fake.bat, requirements_fake.txt   запуск фейка в .venv_fake (PyTango 10.3.2 + gevent)
 tests/test_core.py      20 проверок алгоритма (python -m tests.test_core)
 tests/test_tango.py     5 проверок TangoResonator на тестовых device-серверах без базы (MultiDeviceTestContext)
@@ -203,6 +208,20 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
   Taurus остался для показа значений и ламп (у него свой поток опроса).
 - Проверено: 3 «мёртвых» резонатора (каждый вызов висит 2 с) - окно не замирает дольше 70 мс;
   фейк: AUTO -> убить фейк -> MANUAL, «Авария» -> поднять фейк -> «Связь восстановлена».
+
+## 8в. EPICS (25.11, без вводных данных от стенда)
+
+- Задача от коллег: «адаптировать программу под EPICS». Вводных (имена PV, CA или PVA, адреса IOC) пока нет.
+- Сделано: `trainer/epics_res.py` (pyepics 3.5.10, CA), тип `"epics"` в config, `epics_ca_addr_list`
+  (ставит EPICS_CA_ADDR_LIST + AUTO_ADDR_LIST=NO до первого обращения). Команды = запись 1 в PV;
+  State Tango -> PV RfOn/Fault (можно null). pyepics при обрыве отдаёт None -> превращаем в IOError.
+  Taurus для EPICS не подключали (нужен плагин taurus_pyepics) - обычные виджеты, как у симулятора.
+- EPICS-фейк на caproto 1.3.0 в .venv; IOC только на 127.0.0.1. exe: collect_dynamic_libs("epics") обязательно,
+  иначе PyInstaller пропускает libca.
+- Проверено (Linux): tests/test_epics (6), программа + EPICS-фейк: AUTO, Spike -> «Авария», обрыв IOC -> MANUAL,
+  перезапуск IOC -> «Связь восстановлена»; собранный exe читает EPICS-фейк. На Windows - не проверялось.
+- Открытые вопросы: имена PV, CA или PV Access (для PVA нужен p4p - другой класс), адреса IOC / gateway,
+  EPICS вместо Tango или вместе (сейчас - вместе, тип у каждого резонатора свой).
 
 ## 9. Что проверено / что нет
 

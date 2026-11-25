@@ -6,3 +6,4 @@ PyQt5==5.15.11
 pyqtgraph==0.14.0
 numpy==1.26.4
 taurus==5.5.0          # показ значений и ламп с устройств (виджеты Taurus)
+pyepics==3.5.10        # EPICS (Channel Access): библиотека CA уже внутри, ставить EPICS не нужно

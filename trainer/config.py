@@ -19,8 +19,12 @@ DEFAULTS = {
     "u_max_kv": 30.0,       # предел уставки U (UcavSetpoint 0..30 кВ)
     "i_max_a": 10.0,        # предел уставки I фидера (IfidSetpoint 0..10 А)
     "tango_host": "",       # например "host:10000"; пусто - берётся из переменной TANGO_HOST
+    # EPICS: где искать IOC, например "10.0.0.5 10.0.0.6"; пусто - из переменной EPICS_CA_ADDR_LIST
+    # (или широковещательный поиск в своей подсети)
+    "epics_ca_addr_list": "",
     "vac_is_current": False,  # True, если cav/Vac отдаёт ток насоса (А), а не Торр
-    # type: "sim" - встроенный симулятор, "tango" - резонатор через Tango.
+    # type: "sim" - встроенный симулятор, "tango" - резонатор через Tango, "epics" - через EPICS.
+    # Для epics: prefix - начало имён PV (RF2 -> RF2:MOD:Ucav ...), "pv": {...} - заменить отдельные имена
     # prefix: начало имени устройств, prefix/mod, prefix/cav, prefix/sspa (у резонаторов отличается цифрами)
     # nodb: true - устройство без базы Tango (фейковый сервер fake_server/fake_rf.py)
     # settings: настройки окна (Low, High, пороги...) - программа сама сохраняет их сюда

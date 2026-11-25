@@ -1,6 +1,7 @@
 """Запуск программы.
     python main.py                      - настройки из training_config.json
     python main.py fake_config.json     - другой файл настроек (например, для фейкового стенда)
+    python main.py fake_epics_config.json  - то же для EPICS-фейка
 """
 import os
 import sys
@@ -16,15 +17,22 @@ from trainer.sim import SimResonator
 
 
 def make_resonators(config):
-    """Резонаторы из training_config.json: "sim" - симулятор, "tango" - настоящий."""
+    """Резонаторы из training_config.json: "sim" - симулятор, "tango" / "epics" - настоящий стенд."""
     if config["tango_host"]:
         os.environ["TANGO_HOST"] = config["tango_host"]
+    if config["epics_ca_addr_list"]:            # где искать IOC (до первого обращения к EPICS!)
+        os.environ["EPICS_CA_ADDR_LIST"] = config["epics_ca_addr_list"]
+        os.environ["EPICS_CA_AUTO_ADDR_LIST"] = "NO"
     result = []
     for i, item in enumerate(config["resonators"]):
         if item["type"] == "tango":
             from trainer.tango_res import TangoResonator   # PyTango нужен только для железа
             res = TangoResonator(item["prefix"], config["vac_coeff"], config["vac_is_current"],
                                  nodb=item.get("nodb", False))
+        elif item["type"] == "epics":
+            from trainer.epics_res import EpicsResonator   # pyepics нужен только для EPICS
+            res = EpicsResonator(item["prefix"], config["vac_coeff"], config["vac_is_current"],
+                                 pv=item.get("pv"))
         else:
             res = SimResonator(conditioned=14 + 3 * i, seed=i,         # каждый «грязный» по-своему
                                vac_coeff=config["vac_coeff"], r_sh=config["r_sh"])
