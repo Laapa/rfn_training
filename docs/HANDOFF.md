@@ -109,6 +109,7 @@ tests/test_tango.py     5 проверок TangoResonator на тестовых 
 run_sim.py              прогон алгоритма в консоли
 training.spec, build_exe.bat   PyInstaller → dist\Training\Training.exe (onedir, без консоли, иконка)
 tools/make_icon.py      рисует ui/app.ico (нужен Pillow)
+docs/EPICS_CHEATSHEET.md  шпаргалка по EPICS для пользователя (что узнать у коллег, config, «нет ответа от PV»)
 docs/SPEC.md            ТЗ и решения; docs/LEGACY_FEATURES.md — чек-лист функций старой программы
 README.md               установка, запуск, фейк, таблица проверок, сборка
 skif.py, dio.py, config.json, skif.spec, ui/skif.ui, ui/icon/   СТАРАЯ программа — не трогать, только образец
