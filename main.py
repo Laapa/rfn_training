@@ -3,6 +3,7 @@
     python main.py fake_config.json     - другой файл настроек (например, для фейкового стенда)
     python main.py fake_epics_config.json  - то же для EPICS-фейка
 """
+import faulthandler
 import os
 import sys
 import traceback
@@ -72,6 +73,10 @@ def choose_stack():
 
 if __name__ == "__main__":
     sys.excepthook = show_error
+    # «Жёсткое» падение внутри библиотеки на C (Python не успевает показать ошибку, окно просто исчезает):
+    # хотя бы место падения - в crash.log рядом с программой
+    CRASH_LOG = open(os.path.join(cfg.BASE, "crash.log"), "a", encoding="utf-8")
+    faulthandler.enable(CRASH_LOG)
     # Масштаб Windows (125%, 150%, 4K): без этих строк PyQt5 рисует мелко или мыльно.
     # Ставятся ДО создания QApplication.
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)

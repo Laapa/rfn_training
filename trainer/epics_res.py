@@ -12,7 +12,16 @@ null - такой PV на стенде нет: RfOn берётся из «Гот
 
 Где искать IOC - "epics_ca_addr_list" в config (EPICS_CA_ADDR_LIST), см. main.py.
 """
+import threading
+
 import epics
+import epics.ca
+
+# У каждого резонатора свой поток-работник (trainer/worker.py). Библиотека CA падает (программа молча
+# закрывается), если несколько потоков одновременно впервые подключаются к EPICS. Поэтому:
+#   - EPICS инициализируем один раз, в главном потоке, при создании первого резонатора;
+#   - новые подключения к PV создаём по очереди (CREATE_LOCK). Чтение/запись уже подключённых - параллельно.
+CREATE_LOCK = threading.Lock()
 
 # какой PV в каком «устройстве» (средняя часть имени по шаблону)
 DEVICE = {
@@ -39,11 +48,15 @@ class EpicsResonator:
         self.timeout = timeout_s
         self.pvs = {}                           # подключаемся при первом обращении (как в TangoResonator)
         self.connected = True
+        if epics.ca.libca is None:              # один раз на программу (повторный вызов пересоздал бы контекст)
+            epics.ca.initialize_libca()         # в главном потоке, до запуска работников
 
     def _pv(self, key):
         if key not in self.pvs:
-            # auto_monitor=False: читаем свежее значение каждый раз (как в Tango), без подписки
-            self.pvs[key] = epics.PV(self.names[key], auto_monitor=False, connection_timeout=self.timeout)
+            with CREATE_LOCK:                   # по очереди, см. CREATE_LOCK
+                epics.ca.use_initial_context()  # этот поток - в общий контекст EPICS главного потока
+                # auto_monitor=False: читаем свежее значение каждый раз (как в Tango), без подписки
+                self.pvs[key] = epics.PV(self.names[key], auto_monitor=False, connection_timeout=self.timeout)
         return self.pvs[key]
 
     def _get(self, key):

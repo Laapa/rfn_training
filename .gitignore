@@ -9,3 +9,9 @@ dist/
 fake_config.json
 fake_server/db_data/
 training_config.json
+crash.log
+error.log
+tango_config.json
+epics_config.json
+fake_epics_config.json
+data_fake_epics/

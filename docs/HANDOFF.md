@@ -234,6 +234,15 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
 - Заголовок «Обзора» показывает стек: «обзор (EPICS)». `training_config.json` больше не создаётся сам
   (только если передать его явно).
 
+## 8д. Падение с EPICS при нескольких резонаторах (27.11)
+
+- У пользователя программа молча закрылась на EPICS-фейке (3 резонатора). Воспроизвёл: segfault в libca -
+  три потока-работника одновременно впервые лезут в CA (create_channel + attach_context).
+- Лечение (`trainer/epics_res.py`): `initialize_libca()` один раз в главном потоке при создании первого
+  EpicsResonator (только если `epics.ca.libca is None` - повторный вызов пересоздаёт контекст!);
+  создание PV под `CREATE_LOCK` + `use_initial_context()`. 8/8 прогонов без падения, тест в test_epics.
+- `main.py`: faulthandler -> `crash.log` рядом с программой (жёсткие падения больше не бесследны).
+
 ## 9. Что проверено / что нет
 
 **Проверено (у ассистента в Linux-контейнере, Python 3.12, PyTango 9.5.1 клиент, фейк на PyTango 10.3.2):**

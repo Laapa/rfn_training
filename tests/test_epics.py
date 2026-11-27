@@ -13,6 +13,7 @@ os.environ.update(EPICS_CA_ADDR_LIST="127.0.0.1", EPICS_CA_AUTO_ADDR_LIST="NO",
 
 from trainer.core import Trainer, Settings, MANUAL          # noqa: E402
 from trainer.epics_res import EpicsResonator, pv_names       # noqa: E402
+from trainer.worker import Worker                            # noqa: E402
 
 FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fake_server", "fake_epics.py")
 
@@ -22,7 +23,7 @@ def main():
     assert pv_names("RF2", {"Vac": "X:Y"})["Vac"] == "X:Y"
     print("ok имена PV по шаблону и замены из config")
 
-    ioc = subprocess.Popen([sys.executable, FAKE, "1"], cwd=tempfile.mkdtemp(),
+    ioc = subprocess.Popen([sys.executable, FAKE, "3"], cwd=tempfile.mkdtemp(),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         res = EpicsResonator("RF2")
@@ -55,6 +56,16 @@ def main():
             tr.tick(t)
         assert res.read_setpoint() == 1 and tr.finished
         print("ok тренировка 0 -> 1 кВ через EPICS")
+
+        # три резонатора, у каждого свой поток, все впервые подключаются одновременно -
+        # раньше библиотека CA от этого падала (программа молча закрывалась)
+        workers = [Worker(Trainer(EpicsResonator(p), Settings(), log=lambda m: None), 200)
+                   for p in ("RF2", "RF3", "RF4")]
+        for w in workers:
+            w.start()
+        time.sleep(3)
+        assert all(w.snapshot and w.snapshot.m for w in workers), [w.snapshot for w in workers]
+        print("ok три резонатора в трёх потоках одновременно")
 
         res.set_voltage(0.5)
         assert tr.enable(100)
