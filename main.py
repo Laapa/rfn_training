@@ -1,5 +1,5 @@
 """Запуск программы.
-    python main.py                      - настройки из training_config.json
+    python main.py                      - спросит «Tango или EPICS?» и возьмёт tango_config.json / epics_config.json
     python main.py fake_config.json     - другой файл настроек (например, для фейкового стенда)
     python main.py fake_epics_config.json  - то же для EPICS-фейка
 """
@@ -17,7 +17,7 @@ from trainer.sim import SimResonator
 
 
 def make_resonators(config):
-    """Резонаторы из training_config.json: "sim" - симулятор, "tango" / "epics" - настоящий стенд."""
+    """Резонаторы из файла настроек: "sim" - симулятор, "tango" / "epics" - настоящий стенд."""
     if config["tango_host"]:
         os.environ["TANGO_HOST"] = config["tango_host"]
     if config["epics_ca_addr_list"]:            # где искать IOC (до первого обращения к EPICS!)
@@ -57,6 +57,19 @@ def show_error(kind, value, tb):
         print(text, file=sys.stderr)
 
 
+def choose_stack():
+    """Окно при запуске: с какой системой управления работаем. Возвращает "tango", "epics" или None (выход)."""
+    box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Question, "Тренировка резонаторов",
+                                "С какой системой управления работаем?")
+    box.setInformativeText("Настройки берутся из " + " / ".join(cfg.STACK_FILES.values())
+                           + " рядом с программой (нет файла - создастся).")
+    buttons = {box.addButton(name, QtWidgets.QMessageBox.AcceptRole): kind
+               for kind, name in (("tango", "Tango"), ("epics", "EPICS"))}
+    box.addButton("Выход", QtWidgets.QMessageBox.RejectRole)
+    box.exec_()
+    return buttons.get(box.clickedButton())
+
+
 if __name__ == "__main__":
     sys.excepthook = show_error
     # Масштаб Windows (125%, 150%, 4K): без этих строк PyQt5 рисует мелко или мыльно.
@@ -66,7 +79,13 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName("Тренировка резонаторов")
     app.setWindowIcon(QtGui.QIcon(style.app_icon()))
-    config, message = cfg.load(sys.argv[1] if len(sys.argv) > 1 else None)
+    if len(sys.argv) > 1:                        # файл указан явно (например, фейк) - без вопроса
+        config, message = cfg.load(sys.argv[1])
+    else:
+        kind = choose_stack()
+        if kind is None:
+            sys.exit(0)
+        config, message = cfg.load(os.path.join(cfg.BASE, cfg.STACK_FILES[kind]), kind)
     window = MainWindow(make_resonators(config), config, message)
     window.resize(900, 260)   # окна резонаторов встают в половины экрана сами
     window.show()

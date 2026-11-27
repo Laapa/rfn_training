@@ -69,7 +69,7 @@ class ResonatorPanel(QtWidgets.QWidget):
     log_signal = QtCore.pyqtSignal(str)    # журнал из потока-работника -> в окно (Qt-виджеты - только из окна)
 
     def __init__(self, name, trainer, config, item=None):
-        """item - запись этого резонатора в training_config.json (туда сохраняются настройки окна)."""
+        """item - запись этого резонатора в файле настроек (туда сохраняются настройки окна)."""
         super().__init__()
         self.setWindowTitle(name)
         self.name = name
@@ -268,7 +268,7 @@ class ResonatorPanel(QtWidgets.QWidget):
         return os.path.join(os.path.basename(folder), name)
 
     def save_settings(self):
-        """Настройки окна (Umax, Umin, пороги...) - в training_config.json, чтобы пережить перезапуск."""
+        """Настройки окна (Umax, Umin, пороги...) - в файл настроек, чтобы пережить перезапуск."""
         s = dataclasses.asdict(self.tr.s)
         s.pop("u_limit")                           # предел берётся из общего config
         self.item["settings"] = s

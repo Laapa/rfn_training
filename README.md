@@ -13,19 +13,24 @@ pip install -r requirements.txt
 ## Запуск
 
 ```
-python main.py                      настройки из training_config.json
-python main.py fake_config.json     другой файл настроек
+python main.py                      спросит «Tango или EPICS?» (так же — двойной щелчок по Training.exe)
+python main.py fake_config.json     конкретный файл настроек, без вопроса (фейки, симулятор)
 ```
 
-При первом запуске создаётся `training_config.json`. В нём список резонаторов:
+При запуске программа спрашивает, с какой системой управления работаем, и берёт файл настроек
+рядом с программой: **Tango** → `tango_config.json`, **EPICS** → `epics_config.json`.
+Нет файла — создаётся с резонаторами нужного типа (префиксы `rf3`, `rf4` / `RF3`, `RF4` — догадка, поправить):
 
 ```json
-{"name": "Резонатор 1", "type": "tango", "prefix": "rf2/1e2"}
+{"name": "Резонатор 2", "type": "tango", "prefix": "rf2/1e2"}
+{"name": "Резонатор 2", "type": "epics", "prefix": "RF2"}
 ```
 
-- `type`: `"sim"` — встроенный симулятор, `"tango"` — резонатор через Tango
-  (устройства `prefix/mod`, `prefix/cav`, `prefix/sspa`);
+- `type`: `"tango"` — через Tango (устройства `prefix/mod`, `prefix/cav`, `prefix/sspa`),
+  `"epics"` — через EPICS Channel Access (см. раздел EPICS), `"sim"` — встроенный симулятор;
+  в одном файле можно смешивать;
 - `tango_host` — адрес базы Tango, если не задана переменная окружения `TANGO_HOST`;
+- `epics_ca_addr_list` — адреса IOC для EPICS (подробно: `docs/EPICS_CHEATSHEET.md`);
 - `tick_ms` — период работы алгоритма (1000 = раз в секунду);
 - `settings` у резонатора программа заполняет сама (Low, High, пороги...), их не трогать.
 
@@ -106,7 +111,7 @@ build_exe.bat
 ```
 
 Собирает окружением `.venv` (PyInstaller ставит туда сам). Результат — папка `dist\Training`
-с `Training.exe` (копировать папку целиком). `training_config.json` и `data` создаются рядом с exe.
+с `Training.exe` (копировать папку целиком). `tango_config.json` / `epics_config.json` и `data` создаются рядом с exe.
 
 Проверить exe на фейковом стенде (фейк запущен):
 ```

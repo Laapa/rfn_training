@@ -24,9 +24,11 @@ Qt = QtCore.Qt
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, resonators, config, message=""):
-        """resonators - список пар (имя, объект резонатора), config - из training_config.json."""
+        """resonators - список пар (имя, объект резонатора), config - из файла настроек."""
         super().__init__()
-        self.setWindowTitle("Тренировка резонаторов - обзор")
+        kinds = {r.get("type", "sim") for r in config["resonators"]}   # с чем работаем - в заголовок
+        names = {"tango": "Tango", "epics": "EPICS", "sim": "симулятор"}
+        self.setWindowTitle("Тренировка резонаторов - обзор (" + " + ".join(names.get(k, k) for k in sorted(kinds)) + ")")
         self.config = config
 
         self.table = QtWidgets.QTableWidget(len(resonators), len(COLUMNS))

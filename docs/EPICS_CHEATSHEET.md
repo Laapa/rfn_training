@@ -27,7 +27,8 @@
 | вакуум | `Vac` | `RF2:CAV:Vac` | читаем (Торр; если ток в А — `"vac_is_current": true`) |
 | Pпад / Pотр | `SspaPforw` / `SspaPrefl` | `RF2:SSPA:SspaPforw` ... | читаем |
 
-## Куда вписать — training_config.json (код не трогаем)
+## Куда вписать — epics_config.json рядом с программой (код не трогаем)
+При запуске программа спросит «Tango или EPICS?» → **EPICS** → берёт `epics_config.json` (нет — создаст).
 ```json
 {
     "epics_ca_addr_list": "10.0.0.6",

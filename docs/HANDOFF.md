@@ -87,7 +87,8 @@ trainer/worker.py       Worker - поток на каждый резонатор
                         действий от кнопок. Окно с Tango само НЕ разговаривает (tests/test_worker.py)
 trainer/epics_res.py    EpicsResonator - то же через EPICS (pyepics, Channel Access); PV по шаблону
                         <prefix>:<MOD|CAV|SSPA>:<имя>, любое меняется в config ("pv": {...}); tests/test_epics.py
-trainer/config.py       training_config.json рядом с программой/exe; load(path), save(); data_dir рядом с config
+trainer/config.py       tango_config.json / epics_config.json (выбор при запуске) рядом с программой/exe;
+                        load(path, kind), save(); data_dir рядом с config
 trainer/datafile.py     запись .dat (раз в тик) + журнал .log в data/<резонатор>/ГГГГ-ММ-ДД@ЧЧ-ММ-СС.*
 gui/main_window.py      окно «Обзор»: таблица резонаторов, галка = открыть окно резонатора,
                         «Просмотр записей…», общий QTimer (tick_ms), load_settings() из config
@@ -119,7 +120,7 @@ skif.py, dio.py, config.json, skif.spec, ui/skif.ui, ui/icon/   СТАРАЯ п�
 `read_vacuum, read_setpoint, set_voltage, read_current, set_current, read_ready, read_measurements
 (u, i, p_fwd, p_ref, pump_a, ready, agc_u, agc_i, rf_on, fault), reset_all, mod_on, mod_off, connected`.
 
-Config (`training_config.json` / `fake_config.json`): `tick_ms, vac_coeff, r_sh, u_otr_max, history_s, data_dir,
+Config (`tango_config.json` / `epics_config.json` / `fake_config.json` / `fake_epics_config.json`): `tick_ms, vac_coeff, r_sh, u_otr_max, history_s, data_dir,
 dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, type: sim|tango, prefix, nodb?, settings}]`.
 `settings` программа пишет сама при каждом изменении поля.
 
@@ -223,6 +224,15 @@ dark_theme, u_max_kv, i_max_a, tango_host, vac_is_current, resonators[{name, typ
   перезапуск IOC -> «Связь восстановлена»; собранный exe читает EPICS-фейк. На Windows - не проверялось.
 - Открытые вопросы: имена PV, CA или PV Access (для PVA нужен p4p - другой класс), адреса IOC / gateway,
   EPICS вместо Tango или вместе (сейчас - вместе, тип у каждого резонатора свой).
+
+## 8г. Выбор стека при запуске (27.11)
+
+- Пользователь узнал: на стенде EPICS - **Channel Access** (CA), как и сделано.
+- `python main.py` / двойной щелчок по exe -> окно «С какой системой управления работаем?» [Tango] [EPICS] [Выход]
+  -> `tango_config.json` / `epics_config.json` рядом с программой (`config.STACK_FILES`); нет файла - создаётся
+  с резонаторами этого типа (`config.RESONATORS`). Явный файл в командной строке - без вопроса (фейки).
+- Заголовок «Обзора» показывает стек: «обзор (EPICS)». `training_config.json` больше не создаётся сам
+  (только если передать его явно).
 
 ## 9. Что проверено / что нет
 
